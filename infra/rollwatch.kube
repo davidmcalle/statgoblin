@@ -1,0 +1,14 @@
+# Quadlet unit: runs pod.yaml under systemd so the pod survives reboot.
+# Install (rootless):
+#   cp rollwatch.kube ~/.config/containers/systemd/
+#   systemctl --user daemon-reload && systemctl --user start rollwatch
+[Unit]
+Description=Rollwatch pod
+After=network-online.target
+Wants=network-online.target
+
+[Kube]
+Yaml=/opt/rollwatch/infra/pod.yaml
+
+[Install]
+WantedBy=default.target

@@ -1,0 +1,7 @@
+node_modules
+.next
+.git
+.env*
+generated
+infra/pod.yaml
+*.md

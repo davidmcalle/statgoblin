@@ -1,0 +1,9 @@
+# Terminates TLS for the DuckDNS hostname and proxies to the app in the same
+# pod. Cert via the DuckDNS DNS challenge — no inbound port 80 needed.
+{$SITE_ADDRESS} {
+	encode gzip
+	reverse_proxy localhost:3000
+	tls {
+		dns duckdns {$DUCKDNS_TOKEN}
+	}
+}

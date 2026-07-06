@@ -1,0 +1,56 @@
+# Podman pod: postgres + app + caddy sharing one network namespace, so the app
+# reaches Postgres and Caddy reaches the app over localhost.
+#
+#   podman play kube infra/pod.yaml
+#
+# Replace the change-me values with real secrets before first start. The app
+# image auto-updates from GHCR via podman-auto-update (see the annotation);
+# migrations run automatically at container start.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: rollwatch
+  annotations:
+    io.containers.autoupdate/app: registry
+spec:
+  containers:
+    - name: postgres
+      image: docker.io/library/postgres:16
+      env:
+        - { name: POSTGRES_USER, value: rollwatch }
+        - { name: POSTGRES_PASSWORD, value: change-me }
+        - { name: POSTGRES_DB, value: rollwatch }
+      volumeMounts:
+        - { name: pgdata, mountPath: /var/lib/postgresql/data }
+
+    - name: app
+      image: ghcr.io/davidmcalle/rollwatch:latest
+      env:
+        - name: DATABASE_URL
+          value: postgresql://rollwatch:change-me@localhost:5432/rollwatch?schema=public
+        - name: CLERK_SECRET_KEY
+          value: change-me
+        - name: NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY
+          value: change-me
+
+    - name: caddy
+      image: localhost/rollwatch-caddy:latest
+      ports:
+        - { containerPort: 443, hostPort: 443 }
+      env:
+        - { name: SITE_ADDRESS, value: rollwatch.darchbox.duckdns.org }
+        - { name: DUCKDNS_TOKEN, value: change-me }
+      volumeMounts:
+        - { name: caddyfile, mountPath: /etc/caddy/Caddyfile }
+        - { name: caddy-data, mountPath: /data }
+
+  volumes:
+    - name: pgdata
+      persistentVolumeClaim: { claimName: rollwatch-pgdata }
+    - name: caddy-data
+      persistentVolumeClaim: { claimName: rollwatch-caddy-data }
+    - name: caddyfile
+      hostPath:
+        # Absolute path to infra/Caddyfile on the VM.
+        path: /opt/rollwatch/infra/Caddyfile
+        type: File
