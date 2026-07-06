@@ -14,7 +14,8 @@ import {
   skillAbilityBuckets,
   type StatFilters,
 } from "@/lib/stats";
-import { actorFidsForKind } from "@/lib/stats";
+import { actorFidsForKind, sessions } from "@/lib/stats";
+import { BubblePackCard } from "./bubble-card";
 import { effectiveKind } from "@/lib/kind";
 import { campaignMembers } from "@/lib/members";
 import { SKILL_NAMES as SKILL_LABELS } from "@/lib/dnd5e-meta";
@@ -59,7 +60,14 @@ export default async function CampaignPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ actor?: string; type?: string; days?: string; kind?: string }>;
+  searchParams: Promise<{
+    actor?: string;
+    type?: string;
+    days?: string;
+    kind?: string;
+    session?: string;
+    by?: string;
+  }>;
 }) {
   const [{ id }, sp] = await Promise.all([params, searchParams]);
   const userId = await requireUserId();
@@ -77,10 +85,13 @@ export default async function CampaignPage({
 
   const days = sp.days ? Number(sp.days) : undefined;
   const kind = ["pc", "npc", "monster"].includes(sp.kind ?? "") ? sp.kind : undefined;
+  // Grouping axis: metrics keyed by character (actor) or by player (author).
+  const by = sp.by === "player" ? ("author" as const) : ("actor" as const);
   const filters: StatFilters = {
     actor: sp.actor || undefined,
     type: sp.type || undefined,
     days: days && Number.isFinite(days) ? days : undefined,
+    session: /^\d{4}-\d{2}-\d{2}$/.test(sp.session ?? "") ? sp.session : undefined,
     // Kind is an actors-table property (override + auto rule); resolve to ids.
     actorFids: kind ? await actorFidsForKind(id, kind) : undefined,
   };
@@ -105,21 +116,23 @@ export default async function CampaignPage({
       orderBy: { updatedAt: "desc" },
       take: 30,
     }),
-    actorStats(id, filters),
-    d20Histogram(id, filters),
+    actorStats(id, filters, by),
+    d20Histogram(id, filters, by),
     rollTypeCounts(id, filters),
     recentDeathSaves(id, filters),
     campaignTotals(id, filters),
     skillAbilityBuckets(id, filters),
-    actorSkillMatrix(id, filters),
+    actorSkillMatrix(id, filters, by),
     filterOptions(id),
     itemUsage(id, filters),
-    actorTops(id, filters),
+    actorTops(id, filters, by),
     prisma.actor.findMany({ where: { campaignId: id } }),
     campaignMembers(id),
   ]);
+  const sessionList = await sessions(id);
 
-  const colors = characterColors(options.actors);
+  // Subject = whatever the grouping axis produces (character or player names).
+  const colors = characterColors([...options.actors, ...stats.map((s) => s.actorName)]);
   const memberName = new Map(members.map((m) => [m.userId, m.name]));
   const statsByName = new Map(stats.map((s) => [s.actorName, s]));
   const topsByName = new Map(tops.map((t) => [t.actorName, t]));
@@ -162,7 +175,7 @@ export default async function CampaignPage({
   const skillBars: NamedCount[] = skillBuckets.map((b) => {
     const ability = b.isSkill ? (SKILL_ABILITY[b.key] ?? b.ability) : b.key;
     return {
-      name: b.isSkill ? (SKILL_NAMES[b.key] ?? b.key) : `${ABILITY_NAMES[b.key] ?? b.key} (raw)`,
+      name: b.isSkill ? (SKILL_NAMES[b.key] ?? b.key) : (ABILITY_NAMES[b.key] ?? b.key),
       count: b.count,
       fill: ABILITY_COLORS[ability ?? ""] ?? FALLBACK,
     };
@@ -195,6 +208,22 @@ export default async function CampaignPage({
     ...Object.fromEntries(skillMatrix.actors.map((a) => [a.name, a.counts[i]])),
   }));
 
+  // Bubble packs — same filtered dataset, so slicers cascade PowerBI-style.
+  const skillBubbles = skillBars.map((b) => ({ name: b.name, value: b.count, color: b.fill }));
+  const subjectBubbles = stats.map((s) => ({
+    name: s.actorName,
+    value: s.allRolls,
+    color: colors.get(s.actorName) ?? FALLBACK,
+  }));
+  const subjectWord = by === "author" ? "player" : "character";
+
+  // Card sections obey the slicers too: kind hides whole groups, the
+  // character filter narrows to that one card.
+  const matchesActor = (c: CharacterCardData) => !filters.actor || c.name === filters.actor;
+  const visiblePcCards = !kind || kind === "pc" ? pcCards.filter(matchesActor) : [];
+  const visibleMonsterCards =
+    kind === "pc" ? [] : monsterCards.filter((c) => (!kind || c.kind === kind) && matchesActor(c));
+
   return (
     <main className="mx-auto w-full max-w-4xl flex-1 space-y-8 p-6">
       <LiveRefresh campaignId={id} />
@@ -217,14 +246,14 @@ export default async function CampaignPage({
         </div>
       </div>
 
-      <FilterBar actors={options.actors} types={options.types} current={sp} />
+      <FilterBar actors={options.actors} types={options.types} sessions={sessionList} current={sp} />
 
       <StatCards totals={totals} />
 
-      {(pcCards.length > 0 || (isCreator && monsterCards.length > 0)) && (
+      {(visiblePcCards.length > 0 || (isCreator && visibleMonsterCards.length > 0)) && (
         <Section title="The party" description="Each character's story so far">
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {pcCards.map((c) => (
+            {visiblePcCards.map((c) => (
               <CharacterCard
                 key={c.actorId}
                 data={c}
@@ -235,7 +264,9 @@ export default async function CampaignPage({
               />
             ))}
           </div>
-          {isCreator && <MonsterBrowser cards={monsterCards} members={members} />}
+          {isCreator && visibleMonsterCards.length > 0 && (
+            <MonsterBrowser cards={visibleMonsterCards} members={members} />
+          )}
         </Section>
       )}
 
@@ -247,6 +278,19 @@ export default async function CampaignPage({
           />
           <RollTypesCard data={typeBars} />
         </div>
+        <div className="grid gap-4 lg:grid-cols-2">
+          <BubblePackCard
+            title="Skill bubbles"
+            description="Bubble size = times rolled, colored by ability"
+            bubbles={skillBubbles}
+            legend={abilitiesInUse.map((a) => ({ label: ABILITY_NAMES[a], color: ABILITY_COLORS[a] }))}
+          />
+          <BubblePackCard
+            title={`Rolls by ${subjectWord}`}
+            description={`Bubble size = total rolls per ${subjectWord}`}
+            bubbles={subjectBubbles}
+          />
+        </div>
         <ItemsCard items={items} />
       </Section>
 
@@ -257,9 +301,12 @@ export default async function CampaignPage({
         </div>
       </Section>
 
-      <Section title="Characters" description="Who does what, and how well">
+      <Section
+        title={by === "author" ? "Players" : "Characters"}
+        description="Who does what, and how well"
+      >
         <div className="grid gap-4">
-          <CharacterTable stats={stats} colors={colors} />
+          <CharacterTable stats={stats} colors={colors} subjectLabel={subjectWord} />
           <SkillRadarCard data={radarData} series={radarSeries} />
         </div>
       </Section>

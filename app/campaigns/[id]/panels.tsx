@@ -65,22 +65,25 @@ export function StatCards({ totals }: { totals: CampaignTotals }) {
 export function CharacterTable({
   stats,
   colors,
+  subjectLabel = "character",
 }: {
   stats: ActorStats[];
   colors: Map<string, string>;
+  subjectLabel?: string;
 }) {
   if (stats.length === 0) return null;
+  const title = subjectLabel === "player" ? "Players" : "Characters";
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Characters</CardTitle>
-        <CardDescription>Everything each character has put on the table</CardDescription>
+        <CardTitle>{title}</CardTitle>
+        <CardDescription>Everything each {subjectLabel} has put on the table</CardDescription>
       </CardHeader>
       <CardContent>
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Character</TableHead>
+              <TableHead className="capitalize">{subjectLabel}</TableHead>
               <TableHead className="text-right">Rolls</TableHead>
               <TableHead className="text-right">d20s</TableHead>
               <TableHead className="text-right">Avg d20</TableHead>
@@ -172,9 +175,11 @@ export function ItemsCard({ items }: { items: ItemUsage[] }) {
           {items.map((i) => (
             <li key={i.itemName} className="flex items-center gap-3 text-sm">
               <span className="w-40 shrink-0 truncate font-medium">{i.itemName}</span>
-              <Badge variant="outline" className="shrink-0 capitalize">
-                {ITEM_TYPE_LABEL[i.itemType ?? ""] ?? i.itemType ?? "?"}
-              </Badge>
+              <span className="w-24 shrink-0">
+                <Badge variant="outline" className="capitalize">
+                  {ITEM_TYPE_LABEL[i.itemType ?? ""] ?? i.itemType ?? "?"}
+                </Badge>
+              </span>
               <span className="h-2 flex-1 rounded bg-muted">
                 <span
                   className="block h-2 rounded bg-primary/60"

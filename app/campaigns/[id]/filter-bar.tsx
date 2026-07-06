@@ -25,17 +25,31 @@ const KINDS = [
   { value: "monster", label: "Monsters" },
 ];
 
+const BY = [
+  { value: "character", label: "By character" },
+  { value: "player", label: "By player" },
+];
+
 // URL-param driven filters: the server page re-queries on navigation, so
 // every panel below reflects the selection. Base UI's Select renders labels
 // from the `items` map passed to the root.
 export function FilterBar({
   actors,
   types,
+  sessions,
   current,
 }: {
   actors: string[];
   types: string[];
-  current: { actor?: string; type?: string; days?: string; kind?: string };
+  sessions: { n: number; date: string }[];
+  current: {
+    actor?: string;
+    type?: string;
+    days?: string;
+    kind?: string;
+    session?: string;
+    by?: string;
+  };
 }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -48,8 +62,24 @@ export function FilterBar({
     router.replace(`${pathname}?${params.toString()}`, { scroll: false });
   };
 
-  const hasFilters = !!(current.actor || current.type || current.days || current.kind);
+  const hasFilters = !!(
+    current.actor ||
+    current.type ||
+    current.days ||
+    current.kind ||
+    current.session
+  );
   const kindItems = [{ value: ALL, label: "Everyone" }, ...KINDS];
+  const sessionItems = [
+    { value: ALL, label: "All sessions" },
+    ...sessions
+      .slice()
+      .reverse()
+      .map((s) => ({
+        value: s.date,
+        label: `Session ${s.n} — ${new Date(`${s.date}T00:00:00Z`).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}`,
+      })),
+  ];
 
   const actorItems = [
     { value: ALL, label: "All characters" },
@@ -124,6 +154,40 @@ export function FilterBar({
         </SelectTrigger>
         <SelectContent>
           {timeItems.map((i) => (
+            <SelectItem key={i.value} value={i.value}>
+              {i.label}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+
+      <Select
+        items={sessionItems}
+        value={current.session ?? ALL}
+        onValueChange={(v) => setParam("session", v ?? ALL)}
+      >
+        <SelectTrigger className="w-44">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {sessionItems.map((i) => (
+            <SelectItem key={i.value} value={i.value}>
+              {i.label}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+
+      <Select
+        items={BY}
+        value={current.by === "player" ? "player" : "character"}
+        onValueChange={(v) => setParam("by", v === "player" ? "player" : ALL)}
+      >
+        <SelectTrigger className="w-36">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {BY.map((i) => (
             <SelectItem key={i.value} value={i.value}>
               {i.label}
             </SelectItem>

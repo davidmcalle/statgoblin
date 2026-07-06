@@ -10,6 +10,8 @@ export type StatFilters = {
   actor?: string;
   type?: string;
   days?: number;
+  /** ISO date ("2026-07-06") — one session = one distinct play date. */
+  session?: string;
   /**
    * Foundry actor ids to include — the resolved form of a kind filter
    * (pc/npc/monster). Kind is an actors-table property (override + auto rule),
@@ -17,6 +19,16 @@ export type StatFilters = {
    */
   actorFids?: string[];
 };
+
+/**
+ * Grouping axis for the per-subject panels: by character (actor_name) or by
+ * player (author_name). Static strings only — never user input.
+ */
+export type GroupBy = "actor" | "author";
+
+function subjectCol(by: GroupBy): Prisma.Sql {
+  return by === "author" ? Prisma.raw("author_name") : Prisma.raw("actor_name");
+}
 
 /** Resolve a kind (pc/npc/monster) to the campaign's matching actor fids. */
 export async function actorFidsForKind(
@@ -37,18 +49,44 @@ function sqlFilters(campaignId: string, f: StatFilters): Prisma.Sql {
     ${f.actor ? Prisma.sql`AND actor_name = ${f.actor}` : Prisma.empty}
     ${f.type ? Prisma.sql`AND roll_type = ${f.type}` : Prisma.empty}
     ${f.actorFids ? Prisma.sql`AND actor_fid = ANY(${f.actorFids})` : Prisma.empty}
+    ${f.session ? Prisma.sql`AND rolled_at::date = ${f.session}::date` : Prisma.empty}
     ${f.days ? Prisma.sql`AND rolled_at > now() - make_interval(days => ${f.days})` : Prisma.empty}`;
 }
 
 function whereFilters(campaignId: string, f: StatFilters) {
+  const sessionStart = f.session ? new Date(`${f.session}T00:00:00Z`) : undefined;
   return {
     campaignId,
     deletedAt: null,
     ...(f.actor ? { actorName: f.actor } : {}),
     ...(f.type ? { rollType: f.type } : {}),
     ...(f.actorFids ? { actorFid: { in: f.actorFids } } : {}),
-    ...(f.days ? { rolledAt: { gt: new Date(Date.now() - f.days * 86_400_000) } } : {}),
+    ...(sessionStart
+      ? { rolledAt: { gte: sessionStart, lt: new Date(sessionStart.getTime() + 86_400_000) } }
+      : f.days
+        ? { rolledAt: { gt: new Date(Date.now() - f.days * 86_400_000) } }
+        : {}),
   };
+}
+
+export type SessionInfo = { n: number; date: string; rolls: number };
+
+/**
+ * One session per distinct play date, numbered oldest-first. Numbering is
+ * derived fresh each time, so deleting a whole day's rolls renumbers the rest.
+ */
+export async function sessions(campaignId: string): Promise<SessionInfo[]> {
+  const rows = await prisma.$queryRaw<{ day: Date; rolls: bigint }[]>`
+    SELECT rolled_at::date AS day, COUNT(*) AS rolls
+    FROM rolls
+    WHERE campaign_id = ${campaignId}::uuid AND deleted_at IS NULL
+    GROUP BY 1
+    ORDER BY 1`;
+  return rows.map((r, i) => ({
+    n: i + 1,
+    date: r.day.toISOString().slice(0, 10),
+    rolls: Number(r.rolls),
+  }));
 }
 
 export type ActorStats = {
@@ -62,10 +100,16 @@ export type ActorStats = {
   healing: number;
 };
 
-export async function actorStats(campaignId: string, f: StatFilters = {}): Promise<ActorStats[]> {
+/** Per-subject stats; `actorName` holds the actor OR player name per `by`. */
+export async function actorStats(
+  campaignId: string,
+  f: StatFilters = {},
+  by: GroupBy = "actor",
+): Promise<ActorStats[]> {
+  const col = subjectCol(by);
   const rows = await prisma.$queryRaw<
     {
-      actor_name: string;
+      subject: string;
       all_rolls: bigint;
       d20_rolls: bigint;
       nat20s: bigint;
@@ -75,7 +119,7 @@ export async function actorStats(campaignId: string, f: StatFilters = {}): Promi
       healing: number | null;
     }[]
   >`
-    SELECT actor_name,
+    SELECT ${col}                                                              AS subject,
            COUNT(*)                                                            AS all_rolls,
            COUNT(*) FILTER (WHERE d20 IS NOT NULL)                             AS d20_rolls,
            COUNT(*) FILTER (WHERE is_nat20)                                    AS nat20s,
@@ -85,11 +129,11 @@ export async function actorStats(campaignId: string, f: StatFilters = {}): Promi
            COALESCE(SUM(damage_total) FILTER (WHERE roll_type = 'healing'), 0) AS healing
     FROM rolls
     WHERE ${sqlFilters(campaignId, f)}
-      AND actor_name IS NOT NULL AND actor_name <> ''
-    GROUP BY actor_name
+      AND ${col} IS NOT NULL AND ${col} <> ''
+    GROUP BY ${col}
     ORDER BY all_rolls DESC`;
   return rows.map((r) => ({
-    actorName: r.actor_name,
+    actorName: r.subject,
     allRolls: Number(r.all_rolls),
     d20Rolls: Number(r.d20_rolls),
     nat20s: Number(r.nat20s),
@@ -135,17 +179,40 @@ export async function campaignTotals(
   };
 }
 
-export type D20Bucket = { face: number; count: number };
+export type D20Bucket = {
+  face: number;
+  count: number;
+  byName: { name: string; count: number }[];
+};
 
-/** Full 1–20 histogram (zero-filled) of every d20 rolled. */
-export async function d20Histogram(campaignId: string, f: StatFilters = {}): Promise<D20Bucket[]> {
-  const rows = await prisma.roll.groupBy({
-    by: ["d20"],
-    where: { ...whereFilters(campaignId, f), d20: { not: null } },
-    _count: { _all: true },
-  });
-  const byFace = new Map(rows.map((r) => [r.d20 as number, r._count._all]));
-  return Array.from({ length: 20 }, (_, i) => ({ face: i + 1, count: byFace.get(i + 1) ?? 0 }));
+/**
+ * Full 1–20 histogram (zero-filled), with a per-subject breakdown for each
+ * face so the tooltip can say who rolled what.
+ */
+export async function d20Histogram(
+  campaignId: string,
+  f: StatFilters = {},
+  by: GroupBy = "actor",
+): Promise<D20Bucket[]> {
+  const col = subjectCol(by);
+  const rows = await prisma.$queryRaw<{ d20: number; subject: string | null; count: bigint }[]>`
+    SELECT d20, ${col} AS subject, COUNT(*) AS count
+    FROM rolls
+    WHERE ${sqlFilters(campaignId, f)} AND d20 IS NOT NULL
+    GROUP BY 1, 2`;
+  const buckets = Array.from({ length: 20 }, (_, i) => ({
+    face: i + 1,
+    count: 0,
+    byName: [] as { name: string; count: number }[],
+  }));
+  for (const r of rows) {
+    const b = buckets[r.d20 - 1];
+    if (!b) continue;
+    b.count += Number(r.count);
+    b.byName.push({ name: r.subject ?? "—", count: Number(r.count) });
+  }
+  for (const b of buckets) b.byName.sort((x, y) => y.count - x.count);
+  return buckets;
 }
 
 export type RollTypeCount = { rollType: string; count: number };
@@ -203,24 +270,26 @@ export type SkillMatrix = {
   actors: { name: string; counts: number[] }[];
 };
 
-/** Actor × skill counts for the radar chart. */
+/** Subject × skill counts for the radar chart. */
 export async function actorSkillMatrix(
   campaignId: string,
   f: StatFilters = {},
+  by: GroupBy = "actor",
 ): Promise<SkillMatrix> {
-  const rows = await prisma.$queryRaw<{ actor_name: string; skill: string; count: bigint }[]>`
-    SELECT actor_name, skill, COUNT(*) AS count
+  const col = subjectCol(by);
+  const rows = await prisma.$queryRaw<{ subject: string; skill: string; count: bigint }[]>`
+    SELECT ${col} AS subject, skill, COUNT(*) AS count
     FROM rolls
     WHERE ${sqlFilters(campaignId, f)}
       AND skill IS NOT NULL
-      AND actor_name IS NOT NULL AND actor_name <> ''
+      AND ${col} IS NOT NULL AND ${col} <> ''
     GROUP BY 1, 2`;
   const skills = [...new Set(rows.map((r) => r.skill))].sort();
   const byActor = new Map<string, Map<string, number>>();
   for (const r of rows) {
-    const m = byActor.get(r.actor_name) ?? new Map<string, number>();
+    const m = byActor.get(r.subject) ?? new Map<string, number>();
     m.set(r.skill, Number(r.count));
-    byActor.set(r.actor_name, m);
+    byActor.set(r.subject, m);
   }
   return {
     skills,
@@ -271,35 +340,40 @@ export async function itemUsage(
 
 export type ActorTop = { actorName: string; topSkill: string | null; topItem: string | null };
 
-/** Each actor's most-rolled skill and most-used item. */
-export async function actorTops(campaignId: string, f: StatFilters = {}): Promise<ActorTop[]> {
+/** Each subject's most-rolled skill and most-used item. */
+export async function actorTops(
+  campaignId: string,
+  f: StatFilters = {},
+  by: GroupBy = "actor",
+): Promise<ActorTop[]> {
+  const col = subjectCol(by);
   const rows = await prisma.$queryRaw<
-    { actor_name: string; top_skill: string | null; top_item: string | null }[]
+    { subject: string; top_skill: string | null; top_item: string | null }[]
   >`
     WITH skills AS (
-      SELECT actor_name, skill,
-             ROW_NUMBER() OVER (PARTITION BY actor_name ORDER BY COUNT(*) DESC) rn
+      SELECT ${col} AS subject, skill,
+             ROW_NUMBER() OVER (PARTITION BY ${col} ORDER BY COUNT(*) DESC) rn
       FROM rolls
-      WHERE ${sqlFilters(campaignId, f)} AND skill IS NOT NULL AND actor_name IS NOT NULL
-      GROUP BY actor_name, skill
+      WHERE ${sqlFilters(campaignId, f)} AND skill IS NOT NULL AND ${col} IS NOT NULL
+      GROUP BY ${col}, skill
     ), items AS (
-      SELECT actor_name, item_name,
-             ROW_NUMBER() OVER (PARTITION BY actor_name ORDER BY COUNT(DISTINCT message_id) DESC) rn
+      SELECT ${col} AS subject, item_name,
+             ROW_NUMBER() OVER (PARTITION BY ${col} ORDER BY COUNT(DISTINCT message_id) DESC) rn
       FROM rolls
-      WHERE ${sqlFilters(campaignId, f)} AND item_name IS NOT NULL AND item_name <> '' AND actor_name IS NOT NULL
-      GROUP BY actor_name, item_name
+      WHERE ${sqlFilters(campaignId, f)} AND item_name IS NOT NULL AND item_name <> '' AND ${col} IS NOT NULL
+      GROUP BY ${col}, item_name
     ), names AS (
-      SELECT DISTINCT actor_name FROM rolls
-      WHERE ${sqlFilters(campaignId, f)} AND actor_name IS NOT NULL AND actor_name <> ''
+      SELECT DISTINCT ${col} AS subject FROM rolls
+      WHERE ${sqlFilters(campaignId, f)} AND ${col} IS NOT NULL AND ${col} <> ''
     )
-    SELECT n.actor_name,
+    SELECT n.subject,
            s.skill      AS top_skill,
            i.item_name  AS top_item
     FROM names n
-    LEFT JOIN skills s ON s.actor_name = n.actor_name AND s.rn = 1
-    LEFT JOIN items i ON i.actor_name = n.actor_name AND i.rn = 1`;
+    LEFT JOIN skills s ON s.subject = n.subject AND s.rn = 1
+    LEFT JOIN items i ON i.subject = n.subject AND i.rn = 1`;
   return rows.map((r) => ({
-    actorName: r.actor_name,
+    actorName: r.subject,
     topSkill: r.top_skill,
     topItem: r.top_item,
   }));

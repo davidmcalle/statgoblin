@@ -49,7 +49,7 @@ export function SkillBarsCard({
             <YAxis
               type="category"
               dataKey="name"
-              width={120}
+              width={130}
               tickLine={false}
               axisLine={false}
             />
@@ -88,7 +88,7 @@ export function RollTypesCard({ data }: { data: NamedCount[] }) {
           <BarChart data={data} layout="vertical" margin={{ left: 8, right: 16 }}>
             <CartesianGrid horizontal={false} strokeOpacity={0.25} />
             <XAxis type="number" allowDecimals={false} tickLine={false} axisLine={false} />
-            <YAxis type="category" dataKey="name" width={110} tickLine={false} axisLine={false} />
+            <YAxis type="category" dataKey="name" width={130} tickLine={false} axisLine={false} />
             <ChartTooltip cursor={{ fillOpacity: 0.06 }} content={<ChartTooltipContent />} />
             <Bar dataKey="count" radius={3} barSize={20}>
               {data.map((d) => (
@@ -102,17 +102,21 @@ export function RollTypesCard({ data }: { data: NamedCount[] }) {
   );
 }
 
-export function D20HistogramCard({ data }: { data: { face: number; count: number }[] }) {
+export type HistBucket = { face: number; count: number; byName: { name: string; count: number }[] };
+
+export function D20HistogramCard({ data }: { data: HistBucket[] }) {
   const total = data.reduce((n, d) => n + d.count, 0);
   if (total === 0) return null;
   const expected = total / 20;
   const config = { count: { label: "Rolls" } } satisfies ChartConfig;
+  const breakdown = new Map(data.map((d) => [d.face, d.byName]));
   return (
     <Card>
       <CardHeader>
         <CardTitle>d20 fairness</CardTitle>
         <CardDescription>
-          {total} d20s · dashed line = perfectly fair ({expected.toFixed(1)} per face)
+          {total} d20s · dashed line = perfectly fair ({expected.toFixed(1)} per face) · hover a
+          bar for who rolled it
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -121,7 +125,26 @@ export function D20HistogramCard({ data }: { data: { face: number; count: number
             <CartesianGrid vertical={false} strokeOpacity={0.25} />
             <XAxis dataKey="face" tickLine={false} axisLine={false} interval={0} fontSize={11} />
             <YAxis allowDecimals={false} tickLine={false} axisLine={false} />
-            <ChartTooltip cursor={{ fillOpacity: 0.06 }} content={<ChartTooltipContent />} />
+            <ChartTooltip
+              cursor={{ fillOpacity: 0.06 }}
+              content={({ active, payload, label }) => {
+                if (!active || !payload?.length) return null;
+                const rows = breakdown.get(Number(label)) ?? [];
+                return (
+                  <div className="rounded-lg border bg-popover px-3 py-2 text-xs shadow-md">
+                    <p className="mb-1 font-semibold">
+                      Rolled {label} — {payload[0]?.value} time{payload[0]?.value === 1 ? "" : "s"}
+                    </p>
+                    {rows.map((r) => (
+                      <p key={r.name} className="flex justify-between gap-4 text-muted-foreground">
+                        <span>{r.name}</span>
+                        <span className="text-foreground">×{r.count}</span>
+                      </p>
+                    ))}
+                  </div>
+                );
+              }}
+            />
             <ReferenceLine y={expected} strokeDasharray="4 4" strokeOpacity={0.5} />
             <Bar dataKey="count" radius={[3, 3, 0, 0]}>
               {data.map((d) => (
