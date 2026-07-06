@@ -1,33 +1,32 @@
 import { prisma } from "@/lib/db/prisma";
 import { PARSER_VERSION, parseActor, parseRolls } from "./parse";
 
-type RawEventRow = {
-  id: string;
-  campaignId: string;
-  messageId: string;
-  payload: unknown;
-  firstSeenAt: Date;
-  deletedAt: Date | null;
-};
-
 /**
  * (Re)derive one raw event: replace its roll rows and refresh the actor.
- * Idempotent — safe to call on every ingest upsert and from reprocess.
+ * Concurrent-safe: midi-qol fires create + several updates milliseconds apart,
+ * so two derives for the same event can interleave delete/insert and trip the
+ * (raw_event_id, roll_index) unique constraint. A per-event advisory lock
+ * serializes them, and the payload is re-read inside the lock so the last
+ * writer derives the freshest state.
  */
-export async function deriveRawEvent(event: RawEventRow): Promise<void> {
-  const rolls = parseRolls(event.payload, event.firstSeenAt);
-  const actor = parseActor(event.payload);
-
+export async function deriveRawEvent(event: { id: string }): Promise<void> {
   await prisma.$transaction(async (tx) => {
-    await tx.roll.deleteMany({ where: { rawEventId: event.id } });
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${event.id}))`;
+    const fresh = await tx.rawEvent.findUnique({ where: { id: event.id } });
+    if (!fresh) return;
+
+    const rolls = parseRolls(fresh.payload, fresh.firstSeenAt);
+    const actor = parseActor(fresh.payload);
+
+    await tx.roll.deleteMany({ where: { rawEventId: fresh.id } });
     if (rolls.length > 0) {
       await tx.roll.createMany({
         data: rolls.map((r) => ({
           ...r,
-          campaignId: event.campaignId,
-          rawEventId: event.id,
-          messageId: event.messageId,
-          deletedAt: event.deletedAt,
+          campaignId: fresh.campaignId,
+          rawEventId: fresh.id,
+          messageId: fresh.messageId,
+          deletedAt: fresh.deletedAt,
         })),
       });
     }
@@ -35,12 +34,12 @@ export async function deriveRawEvent(event: RawEventRow): Promise<void> {
       await tx.actor.upsert({
         where: {
           campaignId_foundryActorId: {
-            campaignId: event.campaignId,
+            campaignId: fresh.campaignId,
             foundryActorId: actor.foundryActorId,
           },
         },
         create: {
-          campaignId: event.campaignId,
+          campaignId: fresh.campaignId,
           ...actor,
           rollCount: rolls.length,
           lastSeenAt: new Date(),
@@ -64,6 +63,7 @@ export async function reprocessCampaign(campaignId: string): Promise<{ events: n
       where: { campaignId },
       orderBy: { id: "asc" },
       take: batchSize,
+      select: { id: true },
       ...(cursor ? { skip: 1, cursor: { id: cursor } } : {}),
     });
     if (events.length === 0) break;
