@@ -11,9 +11,12 @@
   },
   "dependencies": {
     "@clerk/nextjs": "^7.5.12",
+    "@nivo/bar": "^0.99.0",
+    "@nivo/circle-packing": "^0.99.0",
+    "@nivo/core": "^0.99.0",
+    "@nivo/radar": "^0.99.0",
     "@prisma/adapter-pg": "^7.8.0",
     "@prisma/client": "^7.8.0",
-    "d3-hierarchy": "^3.1.2",
     "next": "16.2.10",
     "pg": "^8.22.0",
     "prisma": "^7.8.0",
@@ -23,7 +26,6 @@
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
-    "@types/d3-hierarchy": "^3.1.7",
     "@types/node": "^20",
     "@types/pg": "^8.20.0",
     "@types/react": "^19",

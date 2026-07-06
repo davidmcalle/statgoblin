@@ -18,7 +18,14 @@ import {
   DeathSavesPanel,
   RollTypePanel,
 } from "./stats-panels";
-import { BubblePack, DicePacts, RadarChart, StatCards, type Bubble } from "./charts";
+import { StatCards } from "./charts";
+import {
+  BubbleCard,
+  DicePactsCard,
+  SkillRadarCard,
+  type BubbleDatum,
+  type RadarDatum,
+} from "./charts-client";
 import {
   ABILITY_COLORS,
   ABILITY_NAMES,
@@ -71,14 +78,13 @@ export default async function CampaignPage({ params }: { params: Promise<{ id: s
   const colors = characterColors(stats.map((s) => s.actorName));
   const fallback = "#6b7280";
 
-  const skillBubbles: Bubble[] = skillBuckets.map((b) => {
+  const skillBubbles: BubbleDatum[] = skillBuckets.map((b) => {
     const ability = b.isSkill ? (SKILL_ABILITY[b.key] ?? b.ability) : b.key;
     const label = b.isSkill ? (SKILL_NAMES[b.key] ?? b.key) : (ABILITY_NAMES[b.key] ?? b.key);
     return {
-      label,
+      name: label,
       value: b.count,
       color: ABILITY_COLORS[ability ?? ""] ?? fallback,
-      tooltip: `${label}: ${b.count} rolls`,
     };
   });
   const abilitiesInUse = [
@@ -87,11 +93,10 @@ export default async function CampaignPage({ params }: { params: Promise<{ id: s
     ),
   ].filter((a): a is string => !!a && !!ABILITY_NAMES[a]);
 
-  const characterBubbles: Bubble[] = stats.map((s) => ({
-    label: s.actorName,
+  const characterBubbles: BubbleDatum[] = stats.map((s) => ({
+    name: s.actorName,
     value: s.allRolls,
     color: colors.get(s.actorName) ?? fallback,
-    tooltip: `${s.actorName}: ${s.allRolls} rolls`,
   }));
 
   const pactRows = stats
@@ -103,12 +108,13 @@ export default async function CampaignPage({ params }: { params: Promise<{ id: s
       nat1Rate: s.nat1s / s.d20Rolls,
     }));
 
-  const radarSeries = skillMatrix.actors.map((a) => ({
-    name: a.name,
-    color: colors.get(a.name) ?? fallback,
-    values: a.counts,
+  // nivo radar shape: one row per skill, one key per character.
+  const radarKeys = skillMatrix.actors.map((a) => a.name);
+  const radarData: RadarDatum[] = skillMatrix.skills.map((skill, i) => ({
+    skill: SKILL_NAMES[skill] ?? skill,
+    ...Object.fromEntries(skillMatrix.actors.map((a) => [a.name, a.counts[i]])),
   }));
-  const radarAxes = skillMatrix.skills.map((s) => SKILL_NAMES[s] ?? s);
+  const radarColors = radarKeys.map((n) => colors.get(n) ?? fallback);
 
   return (
     <main className="mx-auto w-full max-w-4xl flex-1 p-6">
@@ -139,7 +145,7 @@ export default async function CampaignPage({ params }: { params: Promise<{ id: s
           avgD20={totals.avgD20}
           highest={totals.highest}
         />
-        <BubblePack
+        <BubbleCard
           title="Dice by ability & skill"
           bubbles={skillBubbles}
           legend={abilitiesInUse.map((a) => ({
@@ -147,10 +153,10 @@ export default async function CampaignPage({ params }: { params: Promise<{ id: s
             color: ABILITY_COLORS[a],
           }))}
         />
-        <DicePacts rows={pactRows} />
+        <DicePactsCard rows={pactRows} />
         <div className="grid gap-4 lg:grid-cols-2">
-          <BubblePack title="Rolls by character" bubbles={characterBubbles} />
-          <RadarChart title="Skill checks" axes={radarAxes} series={radarSeries} />
+          <BubbleCard title="Rolls by character" bubbles={characterBubbles} height={420} />
+          <SkillRadarCard data={radarData} keys={radarKeys} colors={radarColors} />
         </div>
         <ActorStatsTable stats={stats} />
         <div className="grid gap-4 sm:grid-cols-2">
