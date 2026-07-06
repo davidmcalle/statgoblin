@@ -2,12 +2,12 @@ import { createHash, randomBytes } from "node:crypto";
 import { auth } from "@clerk/nextjs/server";
 import { prisma } from "@/lib/db/prisma";
 
-// Credential helpers. The admin API key is 32 random bytes, hex-encoded, shown
-// to the creator exactly once; only its sha256 lands in the DB. Ingest compares
-// hashes, so a DB leak doesn't leak usable keys.
-export function generateIngestKey(): { key: string; hash: string } {
+// Credential helpers. An admin API key is 32 random bytes, hex-encoded, shown
+// to the creator exactly once; only its sha256 (plus a display prefix) lands in
+// the DB. Ingest looks up by hash, so a DB leak doesn't leak usable keys.
+export function generateIngestKey(): { key: string; hash: string; prefix: string } {
   const key = `rw_${randomBytes(32).toString("hex")}`;
-  return { key, hash: hashIngestKey(key) };
+  return { key, hash: hashIngestKey(key), prefix: `${key.slice(0, 11)}…` };
 }
 
 export function hashIngestKey(key: string): string {

@@ -21,17 +21,34 @@ model Campaign {
   // see the ingest credentials, or regenerate the key.
   creatorId String @map("creator_id")
   // Shareable code embedded in invite links; joining adds a member row.
-  inviteCode String @unique @map("invite_code")
-  // sha256 hex of the admin API key the GM pastes into Foundry. The plaintext
-  // key is shown once at creation/regeneration and never stored. The campaign
-  // UUID alone (visible to all members) cannot authorize ingest.
-  ingestKeyHash String   @map("ingest_key_hash")
-  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  inviteCode String   @unique @map("invite_code")
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
 
   members CampaignMember[]
   events  RawEvent[]
+  apiKeys ApiKey[]
 
   @@map("campaigns")
+}
+
+// Admin API keys for ingest, typical key-system shape: several live keys per
+// campaign, individually deletable. Plaintext is shown once at creation and
+// never stored — only the sha256 lands here. The campaign UUID alone (visible
+// to all members) cannot authorize ingest.
+model ApiKey {
+  id         String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  campaignId String @map("campaign_id") @db.Uuid
+  name       String
+  // First characters of the key ("rw_ab12cd34…") so the GM can tell keys apart.
+  keyPrefix  String    @map("key_prefix")
+  keyHash    String    @unique @map("key_hash")
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  lastUsedAt DateTime? @map("last_used_at") @db.Timestamptz(6)
+
+  campaign Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+
+  @@index([campaignId])
+  @@map("api_keys")
 }
 
 model CampaignMember {

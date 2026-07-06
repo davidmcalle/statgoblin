@@ -16,20 +16,20 @@ import {
 
 const nameSchema = z.string().trim().min(1).max(80);
 
-/** Create a campaign; returns the admin API key — the only time it's visible. */
+/** Create a campaign with a starter API key — the only time that key is visible. */
 export async function createCampaign(
   formData: FormData,
 ): Promise<{ ingestKey: string; campaignId: string }> {
   const userId = await requireUserId();
   const name = nameSchema.parse(formData.get("name"));
-  const { key, hash } = generateIngestKey();
+  const { key, hash, prefix } = generateIngestKey();
   const campaign = await prisma.campaign.create({
     data: {
       name,
       creatorId: userId,
       inviteCode: generateInviteCode(),
-      ingestKeyHash: hash,
       members: { create: { userId, role: "gm" } },
+      apiKeys: { create: { name: "Foundry", keyHash: hash, keyPrefix: prefix } },
     },
   });
   revalidatePath("/");
@@ -59,12 +59,28 @@ export async function updateCampaign(campaignId: string, formData: FormData): Pr
   revalidatePath(`/campaigns/${campaignId}`);
 }
 
-/** Creator-only: invalidate the old key, return the new one (shown once). */
-export async function regenerateIngestKey(campaignId: string): Promise<{ ingestKey: string }> {
+/** Creator-only: mint an additional API key; plaintext returned once. */
+export async function createApiKey(
+  campaignId: string,
+  formData: FormData,
+): Promise<{ ingestKey: string }> {
   const userId = await requireUserId();
   await requireCreator(campaignId, userId);
-  const { key, hash } = generateIngestKey();
-  await prisma.campaign.update({ where: { id: campaignId }, data: { ingestKeyHash: hash } });
+  const name = nameSchema.parse(formData.get("name"));
+  const { key, hash, prefix } = generateIngestKey();
+  await prisma.apiKey.create({
+    data: { campaignId, name, keyHash: hash, keyPrefix: prefix },
+  });
   revalidatePath(`/campaigns/${campaignId}`);
   return { ingestKey: key };
+}
+
+/** Creator-only: revoke one key. Other keys keep working. */
+export async function deleteApiKey(keyId: string): Promise<void> {
+  const userId = await requireUserId();
+  const apiKey = await prisma.apiKey.findUnique({ where: { id: keyId } });
+  if (!apiKey) return;
+  await requireCreator(apiKey.campaignId, userId);
+  await prisma.apiKey.delete({ where: { id: keyId } });
+  revalidatePath(`/campaigns/${apiKey.campaignId}`);
 }

@@ -18,7 +18,11 @@ export default async function CampaignPage({ params }: { params: Promise<{ id: s
   const userId = await requireUserId();
   const member = await prisma.campaignMember.findUnique({
     where: { campaignId_userId: { campaignId: id, userId } },
-    include: { campaign: { include: { members: true } } },
+    include: {
+      campaign: {
+        include: { members: true, apiKeys: { orderBy: { createdAt: "asc" } } },
+      },
+    },
   });
   if (!member) notFound();
   const campaign = member.campaign;
@@ -50,7 +54,18 @@ export default async function CampaignPage({ params }: { params: Promise<{ id: s
         </div>
       </div>
 
-      {isCreator && <CampaignSettings campaign={campaign} />}
+      {isCreator && (
+        <CampaignSettings
+          campaign={campaign}
+          apiKeys={campaign.apiKeys.map((k) => ({
+            id: k.id,
+            name: k.name,
+            keyPrefix: k.keyPrefix,
+            createdAt: k.createdAt.toISOString(),
+            lastUsedAt: k.lastUsedAt?.toISOString() ?? null,
+          }))}
+        />
+      )}
 
       <h2 className="mb-3 mt-8 text-lg font-semibold">Latest rolls</h2>
       <ul className="space-y-2 font-mono text-sm">

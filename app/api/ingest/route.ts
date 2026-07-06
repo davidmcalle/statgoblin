@@ -1,4 +1,3 @@
-import { timingSafeEqual } from "node:crypto";
 import { z } from "zod";
 import type { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/db/prisma";
@@ -32,20 +31,22 @@ export async function OPTIONS() {
 }
 
 export async function POST(request: Request) {
-  // Two credentials: the campaign UUID identifies, the admin API key (known
+  // Two credentials: the campaign UUID identifies, an admin API key (known
   // only to the GM, stored hashed) authorizes. A member who knows the UUID
   // can't ingest into — or replay rolls out of — someone else's campaign.
   const key = request.headers.get("authorization")?.replace(/^Bearer\s+/i, "").trim();
   const campaignId = uuidSchema.safeParse(request.headers.get("x-campaign-id")?.trim());
   if (!key || !campaignId.success) return unauthorized("missing campaign id or api key");
 
-  const campaign = await prisma.campaign.findUnique({ where: { id: campaignId.data } });
-  if (!campaign) return unauthorized("unknown campaign");
-  const given = Buffer.from(hashIngestKey(key), "hex");
-  const stored = Buffer.from(campaign.ingestKeyHash, "hex");
-  if (given.length !== stored.length || !timingSafeEqual(given, stored)) {
-    return unauthorized("invalid api key");
+  const apiKey = await prisma.apiKey.findUnique({ where: { keyHash: hashIngestKey(key) } });
+  if (!apiKey || apiKey.campaignId !== campaignId.data) {
+    return unauthorized("invalid campaign id or api key");
   }
+  const campaign = { id: apiKey.campaignId };
+  // Fire-and-forget freshness stamp; ingest shouldn't block on bookkeeping.
+  void prisma.apiKey
+    .update({ where: { id: apiKey.id }, data: { lastUsedAt: new Date() } })
+    .catch(() => {});
 
   const parsed = eventSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) {
