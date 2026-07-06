@@ -2,7 +2,9 @@ import type { Metadata } from "next";
 import { ClerkProvider, UserButton } from "@clerk/nextjs";
 import { auth } from "@clerk/nextjs/server";
 import Link from "next/link";
+import { ThemeProvider } from "next-themes";
 import { D20Mark } from "@/components/logo";
+import { ThemeToggle } from "@/components/theme-toggle";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 
@@ -31,10 +33,10 @@ export default async function RootLayout({
     <html
       lang="en"
       suppressHydrationWarning
-      className={`${geistSans.variable} ${geistMono.variable} dark h-full antialiased`}
+      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">
-        {/* Dark by design — the goblin lives in a cave. */}
+        <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
         <ClerkProvider>
           <header className="flex items-center gap-6 border-b px-6 py-3">
             <Link href="/" className="flex items-center gap-2 text-lg font-bold">
@@ -51,10 +53,14 @@ export default async function RootLayout({
                 </Link>
               </nav>
             )}
-            <span className="ml-auto">{userId && <UserButton />}</span>
+            <span className="ml-auto flex items-center gap-2">
+              <ThemeToggle />
+              {userId && <UserButton />}
+            </span>
           </header>
           {children}
         </ClerkProvider>
+        </ThemeProvider>
       </body>
     </html>
   );
