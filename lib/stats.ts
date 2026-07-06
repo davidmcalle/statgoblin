@@ -9,23 +9,31 @@ export type StatFilters = {
   actor?: string;
   type?: string;
   days?: number;
+  /** "pc" (characters) | "npc" (monsters & NPCs). */
+  kind?: string;
 };
 
+const KIND_TYPE: Record<string, string> = { pc: "character", npc: "npc" };
+
 function sqlFilters(campaignId: string, f: StatFilters): Prisma.Sql {
+  const kindType = f.kind ? KIND_TYPE[f.kind] : undefined;
   return Prisma.sql`
     campaign_id = ${campaignId}::uuid
     AND deleted_at IS NULL
     ${f.actor ? Prisma.sql`AND actor_name = ${f.actor}` : Prisma.empty}
     ${f.type ? Prisma.sql`AND roll_type = ${f.type}` : Prisma.empty}
+    ${kindType ? Prisma.sql`AND actor_type = ${kindType}` : Prisma.empty}
     ${f.days ? Prisma.sql`AND rolled_at > now() - make_interval(days => ${f.days})` : Prisma.empty}`;
 }
 
 function whereFilters(campaignId: string, f: StatFilters) {
+  const kindType = f.kind ? KIND_TYPE[f.kind] : undefined;
   return {
     campaignId,
     deletedAt: null,
     ...(f.actor ? { actorName: f.actor } : {}),
     ...(f.type ? { rollType: f.type } : {}),
+    ...(kindType ? { actorType: kindType } : {}),
     ...(f.days ? { rolledAt: { gt: new Date(Date.now() - f.days * 86_400_000) } } : {}),
   };
 }

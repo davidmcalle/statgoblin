@@ -19,6 +19,11 @@ const TIMEFRAMES = [
 
 const ALL = "__all__";
 
+const KINDS = [
+  { value: "pc", label: "Player characters" },
+  { value: "npc", label: "Monsters & NPCs" },
+];
+
 // URL-param driven filters: the server page re-queries on navigation, so
 // every panel below reflects the selection. Base UI's Select renders labels
 // from the `items` map passed to the root.
@@ -29,7 +34,7 @@ export function FilterBar({
 }: {
   actors: string[];
   types: string[];
-  current: { actor?: string; type?: string; days?: string };
+  current: { actor?: string; type?: string; days?: string; kind?: string };
 }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -42,7 +47,8 @@ export function FilterBar({
     router.replace(`${pathname}?${params.toString()}`, { scroll: false });
   };
 
-  const hasFilters = !!(current.actor || current.type || current.days);
+  const hasFilters = !!(current.actor || current.type || current.days || current.kind);
+  const kindItems = [{ value: ALL, label: "PCs & monsters" }, ...KINDS];
 
   const actorItems = [
     { value: ALL, label: "All characters" },
@@ -66,6 +72,23 @@ export function FilterBar({
         </SelectTrigger>
         <SelectContent>
           {actorItems.map((i) => (
+            <SelectItem key={i.value} value={i.value}>
+              {i.label}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+
+      <Select
+        items={kindItems}
+        value={current.kind ?? ALL}
+        onValueChange={(v) => setParam("kind", v ?? ALL)}
+      >
+        <SelectTrigger className="w-44">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {kindItems.map((i) => (
             <SelectItem key={i.value} value={i.value}>
               {i.label}
             </SelectItem>

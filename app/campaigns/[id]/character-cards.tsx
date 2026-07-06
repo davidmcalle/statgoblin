@@ -9,10 +9,19 @@ export type CharacterCardData = {
   name: string;
   image: string;
   color: string;
+  actorType: string | null;
+  cr: number | null;
   assignedUserId: string | null;
   stats: ActorStats | null;
   tops: ActorTop | null;
 };
+
+function crLabel(cr: number): string {
+  if (cr === 0.125) return "⅛";
+  if (cr === 0.25) return "¼";
+  if (cr === 0.5) return "½";
+  return String(cr);
+}
 
 function Stat({ label, value, className }: { label: string; value: React.ReactNode; className?: string }) {
   return (
@@ -56,7 +65,11 @@ export function CharacterCard({
           <div className="mt-0.5 flex flex-wrap items-center gap-1.5">
             {isOwn && <Badge>You</Badge>}
             {!isOwn && ownerName && <Badge variant="secondary">{ownerName}</Badge>}
-            {!ownerName && <Badge variant="outline">GM / unassigned</Badge>}
+            {!ownerName && data.actorType !== "npc" && (
+              <Badge variant="outline">Unassigned</Badge>
+            )}
+            {data.actorType === "npc" && <Badge variant="destructive">Monster</Badge>}
+            {data.cr !== null && <Badge variant="outline">CR {crLabel(data.cr)}</Badge>}
           </div>
         </div>
       </CardHeader>

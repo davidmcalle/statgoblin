@@ -44,7 +44,15 @@ export async function deriveRawEvent(event: { id: string }): Promise<void> {
           rollCount: rolls.length,
           lastSeenAt: new Date(),
         },
-        update: { name: actor.name, image: actor.image, lastSeenAt: new Date() },
+        update: {
+          name: actor.name,
+          image: actor.image,
+          // Only overwrite when the payload actually knows (module ≥0.2.1 /
+          // npc sheets) — don't null out earlier knowledge.
+          ...(actor.actorType ? { actorType: actor.actorType } : {}),
+          ...(actor.cr !== null ? { cr: actor.cr } : {}),
+          lastSeenAt: new Date(),
+        },
       });
     }
   });

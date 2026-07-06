@@ -32,9 +32,11 @@ const CHARACTERS = [
 ] as const;
 
 const MONSTERS = [
-  { id: "demoActorGoblin0", name: "Goblin", weapon: "Scimitar" },
-  { id: "demoActorOgre000", name: "Ogre", weapon: "Greatclub" },
-  { id: "demoActorWraith0", name: "Wraith", weapon: "Life Drain" },
+  { id: "demoActorGoblin0", name: "Goblin", weapon: "Scimitar", cr: 0.25 },
+  { id: "demoActorOgre000", name: "Ogre", weapon: "Greatclub", cr: 2 },
+  { id: "demoActorWraith0", name: "Wraith", weapon: "Life Drain", cr: 5 },
+  { id: "demoActorBanshee", name: "Banshee", weapon: "Corrupting Touch", cr: 4 },
+  { id: "demoActorZombie0", name: "Zombie", weapon: "Slam", cr: 0.25 },
 ] as const;
 
 const SKILLS = ["acr", "arc", "ath", "dec", "his", "ins", "inv", "med", "prc", "per", "slt", "ste", "sur"] as const;
@@ -84,13 +86,26 @@ function damageRoll(dice: number, faces: number, mod: number, type: string, roll
   };
 }
 
-type Actor = { id: string; name: string };
+type Actor = { id: string; name: string; type: string; cr: number | null };
+
+const pcActor = (c: { id: string; name: string }): Actor => ({
+  id: c.id,
+  name: c.name,
+  type: "character",
+  cr: null,
+});
+const npcActor = (m: { id: string; name: string; cr: number }): Actor => ({
+  id: m.id,
+  name: m.name,
+  type: "npc",
+  cr: m.cr,
+});
 
 function base(actor: Actor, author: { name: string; role: string }, at: Date) {
   return {
     messageCreatedAt: at.toISOString(),
     author: { id: `demoUser${author.name}`, name: author.name, avatar: "", role: author.role },
-    actor: { id: actor.id, name: actor.name, image: "", token: null },
+    actor: { id: actor.id, name: actor.name, image: "", type: actor.type, cr: actor.cr, token: null },
     visibility: { whisper: [], blind: false },
     world: { id: "demo", title: "Demo", image: "" },
     system: { id: "dnd5e", version: "5.3.3" },
@@ -111,7 +126,7 @@ function makeEvent(at: Date): { payload: Record<string, unknown> } {
   if (kind < 0.15) {
     const m = pick(MONSTERS);
     const die = d(20);
-    const p = base(m, { name: "Gamemaster", role: "GAMEMASTER" }, at);
+    const p = base(npcActor(m), { name: "Gamemaster", role: "GAMEMASTER" }, at);
     const dmg = damageRoll(2, 6, 3, pick(DAMAGE_TYPES));
     p.item = { id: `demoItem${m.id}`, uuid: "demo", type: "weapon", name: m.weapon, image: "", activity: { id: "a", type: "attack", name: "Attack" } };
     p.flags = {
@@ -126,7 +141,7 @@ function makeEvent(at: Date): { payload: Record<string, unknown> } {
     const die = d20For(pc.luck);
     const spell = rand() < 0.4;
     const itemName = spell ? pick(SPELLS) : pc.weapon;
-    const p = base(pc, author, at);
+    const p = base(pcActor(pc), author, at);
     const dmg = damageRoll(spell ? 2 : 1, spell ? 10 : 8, 4, spell ? pick(["fire", "radiant", "necrotic"]) : pick(["slashing", "piercing"]));
     p.item = { id: `demoItem${itemName.replace(/\W/g, "")}`, uuid: "demo", type: spell ? "spell" : "weapon", name: itemName, image: "", activity: { id: "a", type: "attack", name: "Attack" } };
     p.flags = {
@@ -142,7 +157,7 @@ function makeEvent(at: Date): { payload: Record<string, unknown> } {
     const ability = SKILL_ABILITY[skill];
     const die = d20For(pc.luck);
     const mod = 1 + Math.floor(rand() * 5);
-    const p = base(pc, author, at);
+    const p = base(pcActor(pc), author, at);
     p.flags = {
       dnd5e: { messageType: "roll", roll: { skillId: skill, type: "skill" } },
       rollwatch: { rolls: [{ parts: [{ source: `@abilities.${ability}.mod`, value: mod }] }], ability, profMultiplier: pick([0, 0, 1, 1, 2]) },
@@ -155,7 +170,7 @@ function makeEvent(at: Date): { payload: Record<string, unknown> } {
     const ability = pick(["dex", "con", "wis", "str"]);
     const die = d20For(pc.luck);
     const conc = ability === "con" && rand() < 0.4;
-    const p = base(pc, author, at);
+    const p = base(pcActor(pc), author, at);
     p.flags = {
       dnd5e: { messageType: "roll", roll: { ability, type: "save" } },
       rollwatch: {
@@ -171,7 +186,7 @@ function makeEvent(at: Date): { payload: Record<string, unknown> } {
   // 8%: healing (potion / feat).
   if (kind < 0.93) {
     const feat = pick(FEATS);
-    const p = base(pc, author, at);
+    const p = base(pcActor(pc), author, at);
     const heal = damageRoll(2, 4, 2, "healing", "healing");
     p.item = { id: `demoItem${feat.replace(/\W/g, "")}`, uuid: "demo", type: "feat", name: feat, image: "", activity: { id: "a", type: "heal", name: "Healing" } };
     p.flags = { dnd5e: { item: { type: "feat" }, activity: { type: "heal" } } };
@@ -181,7 +196,7 @@ function makeEvent(at: Date): { payload: Record<string, unknown> } {
   // 4%: usage card, no roll.
   if (kind < 0.97) {
     const feat = pick(FEATS);
-    const p = base(pc, author, at);
+    const p = base(pcActor(pc), author, at);
     p.item = { id: `demoItem${feat.replace(/\W/g, "")}`, uuid: "demo", type: "feat", name: feat, image: "", activity: null };
     p.flags = { dnd5e: { item: { type: "feat" } } };
     return { payload: p };
@@ -189,7 +204,7 @@ function makeEvent(at: Date): { payload: Record<string, unknown> } {
   // 3%: death save.
   {
     const die = d(20);
-    const p = base(pc, author, at);
+    const p = base(pcActor(pc), author, at);
     p.flavor = "Death Saving Throw";
     p.flags = { dnd5e: { messageType: "roll", roll: { type: "death" } } };
     p.rolls = [d20Roll(die, 0, "death", { target: 10 })];

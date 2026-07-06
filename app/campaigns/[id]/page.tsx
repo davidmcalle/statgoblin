@@ -17,6 +17,7 @@ import {
 import { campaignMembers } from "@/lib/members";
 import { SKILL_NAMES as SKILL_LABELS } from "@/lib/dnd5e-meta";
 import { CharacterCard, type CharacterCardData } from "./character-cards";
+import { MonsterBrowser } from "./monster-browser";
 import {
   ABILITY_COLORS,
   ABILITY_NAMES,
@@ -56,7 +57,7 @@ export default async function CampaignPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ actor?: string; type?: string; days?: string }>;
+  searchParams: Promise<{ actor?: string; type?: string; days?: string; kind?: string }>;
 }) {
   const [{ id }, sp] = await Promise.all([params, searchParams]);
   const userId = await requireUserId();
@@ -77,6 +78,7 @@ export default async function CampaignPage({
     actor: sp.actor || undefined,
     type: sp.type || undefined,
     days: days && Number.isFinite(days) ? days : undefined,
+    kind: sp.kind === "pc" || sp.kind === "npc" ? sp.kind : undefined,
   };
 
   const [
@@ -125,6 +127,8 @@ export default async function CampaignPage({
     name: a.name,
     image: a.image,
     color: colors.get(a.name) ?? FALLBACK,
+    actorType: a.actorType,
+    cr: a.cr,
     assignedUserId: a.assignedUserId,
     stats: statsByName.get(a.name) ?? null,
     tops: topsByName.get(a.name)
@@ -138,11 +142,14 @@ export default async function CampaignPage({
   });
   const byRolls = (x: CharacterCardData, y: CharacterCardData) =>
     (y.stats?.allRolls ?? 0) - (x.stats?.allRolls ?? 0);
+  // PCs: assigned to a player, or typed "character" by dnd5e. Everything else
+  // is the GM's monster/NPC bucket.
+  const isPc = (a: (typeof actors)[number]) => !!a.assignedUserId || a.actorType === "character";
   const pcCards = actors
-    .filter((a) => a.assignedUserId)
+    .filter(isPc)
     .map(cardOf)
     .sort((x, y) => Number(y.assignedUserId === userId) - Number(x.assignedUserId === userId) || byRolls(x, y));
-  const monsterCards = actors.filter((a) => !a.assignedUserId).map(cardOf).sort(byRolls);
+  const monsterCards = actors.filter((a) => !isPc(a)).map(cardOf).sort(byRolls);
 
   const skillBars: NamedCount[] = skillBuckets.map((b) => {
     const ability = b.isSkill ? (SKILL_ABILITY[b.key] ?? b.ability) : b.key;
@@ -220,25 +227,7 @@ export default async function CampaignPage({
               />
             ))}
           </div>
-          {isCreator && monsterCards.length > 0 && (
-            <>
-              <h3 className="pt-2 text-sm font-semibold text-muted-foreground">
-                Monsters &amp; NPCs (GM only — assign player characters above via the selector)
-              </h3>
-              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                {monsterCards.map((c) => (
-                  <CharacterCard
-                    key={c.actorId}
-                    data={c}
-                    isOwn={false}
-                    ownerName={null}
-                    members={members}
-                    canAssign
-                  />
-                ))}
-              </div>
-            </>
-          )}
+          {isCreator && <MonsterBrowser cards={monsterCards} members={members} />}
         </Section>
       )}
 

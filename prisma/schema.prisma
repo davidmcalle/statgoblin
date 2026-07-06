@@ -83,6 +83,8 @@ model Roll {
 
   actorFid  String? @map("actor_fid")
   actorName String? @map("actor_name")
+  // "character" | "npc" (heuristic fallback for events predating module 0.2.1).
+  actorType String? @map("actor_type")
   tokenFid  String? @map("token_fid")
   tokenName String? @map("token_name")
 
@@ -134,6 +136,10 @@ model Actor {
   foundryActorId String   @map("foundry_actor_id")
   name           String
   image          String   @default("")
+  // "character" | "npc"; drives the automatic PC vs monster bucketing.
+  actorType      String?  @map("actor_type")
+  // Challenge rating, npc sheets only.
+  cr             Float?
   assignedUserId String?  @map("assigned_user_id")
   rollCount      Int      @default(0) @map("roll_count")
   lastSeenAt     DateTime @map("last_seen_at") @db.Timestamptz(6)

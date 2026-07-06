@@ -2,7 +2,7 @@
 // owns persistence. Bump PARSER_VERSION whenever classification or extraction
 // changes; reprocess rebuilds campaigns whose derive_state lags.
 
-export const PARSER_VERSION = 1;
+export const PARSER_VERSION = 2;
 
 type Term = {
   class?: string;
@@ -26,7 +26,14 @@ type RollJson = {
 type Payload = {
   messageCreatedAt?: string;
   author?: { name?: string; role?: string } | null;
-  actor?: { id?: string; name?: string; image?: string; token?: { id?: string; name?: string } | null } | null;
+  actor?: {
+    id?: string;
+    name?: string;
+    image?: string;
+    type?: string;
+    cr?: number | null;
+    token?: { id?: string; name?: string } | null;
+  } | null;
   item?: { name?: string; type?: string; activity?: { type?: string } | null } | null;
   flags?: {
     core?: { initiativeRoll?: boolean };
@@ -42,6 +49,7 @@ export type ParsedRoll = {
   rollType: string;
   actorFid: string | null;
   actorName: string | null;
+  actorType: string | null;
   tokenFid: string | null;
   tokenName: string | null;
   authorName: string | null;
@@ -70,7 +78,20 @@ export type ParsedActor = {
   foundryActorId: string;
   name: string;
   image: string;
+  actorType: string | null;
+  cr: number | null;
 };
+
+/**
+ * "character" | "npc". Events from module ≥0.2.1 carry actor.type; older
+ * payloads fall back to a heuristic — GM-authored rolls are almost always
+ * monsters/NPCs, player-authored ones their characters.
+ */
+function actorTypeOf(p: Payload): string | null {
+  if (!p.actor?.id) return null;
+  if (p.actor.type) return p.actor.type;
+  return p.author?.role === "GAMEMASTER" ? "npc" : "character";
+}
 
 /**
  * Message-level classification, in trust order: our enricher flag (knows
@@ -120,6 +141,7 @@ export function parseRolls(payload: unknown, fallbackTime: Date): ParsedRoll[] {
   const base = {
     actorFid: p.actor?.id ?? null,
     actorName: p.actor?.name ?? null,
+    actorType: actorTypeOf(p),
     tokenFid: p.actor?.token?.id ?? null,
     tokenName: p.actor?.token?.name ?? null,
     authorName: p.author?.name ?? null,
@@ -196,5 +218,7 @@ export function parseActor(payload: unknown): ParsedActor | null {
     foundryActorId: p.actor.id,
     name: p.actor.name ?? "",
     image: p.actor.image ?? "",
+    actorType: actorTypeOf(p),
+    cr: typeof p.actor.cr === "number" ? p.actor.cr : null,
   };
 }
