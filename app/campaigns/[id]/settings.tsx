@@ -5,11 +5,15 @@ import { useEffect, useState, useTransition } from "react";
 import {
   createApiKey,
   deleteApiKey,
+  removeMember,
   setHideDeathSaves,
   updateCampaign,
 } from "@/app/actions/campaigns";
 import { CopyButton } from "@/app/_components/copy-button";
 import { Switch } from "@/components/ui/switch";
+import { Badge } from "@/components/ui/badge";
+import { ConfirmDialog } from "@/components/confirm-dialog";
+import type { MemberInfo } from "@/lib/members";
 
 type Campaign = {
   id: string;
@@ -33,14 +37,17 @@ export type ApiKeyRow = {
 export function CampaignSettings({
   campaign,
   apiKeys,
+  members = [],
 }: {
   campaign: Campaign;
   apiKeys: ApiKeyRow[];
+  members?: MemberInfo[];
 }) {
   const [pending, startTransition] = useTransition();
   const [freshKey, setFreshKey] = useState<string | null>(null);
   const [keyName, setKeyName] = useState("");
   const [saved, setSaved] = useState(false);
+  const [removing, setRemoving] = useState<MemberInfo | null>(null);
 
   // Origin only exists in the browser; render the relative link during SSR and
   // upgrade after mount so server and client HTML match.
@@ -120,6 +127,54 @@ export function CampaignSettings({
             <CopyButton value={campaign.id} label="Copy campaign ID" />
           </p>
         </div>
+
+        {members.length > 0 && (
+          <div>
+            <span className="font-semibold">Members</span>
+            <p className="mb-2 text-muted-foreground">
+              Removing a player unassigns their characters and revokes their access. Their rolls
+              stay with the campaign.
+            </p>
+            <ul className="space-y-1">
+              {members.map((m) => (
+                <li
+                  key={m.userId}
+                  className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded border border-border px-3 py-2"
+                >
+                  <span className="font-semibold">{m.name}</span>
+                  <Badge variant={m.role === "gm" ? "default" : "secondary"}>
+                    {m.role === "gm" ? "GM" : "Player"}
+                  </Badge>
+                  {m.role !== "gm" && (
+                    <button
+                      disabled={pending}
+                      onClick={() => setRemoving(m)}
+                      className="ml-auto rounded border border-red-300 px-2 py-0.5 text-xs text-red-600 disabled:opacity-50 dark:border-red-800"
+                    >
+                      Remove
+                    </button>
+                  )}
+                </li>
+              ))}
+            </ul>
+            <ConfirmDialog
+              open={removing !== null}
+              onOpenChange={(open) => !open && setRemoving(null)}
+              title={`Remove ${removing?.name ?? "this player"}?`}
+              description="Their characters return to the unassigned bucket and they lose access to the campaign. Their rolls stay."
+              confirmLabel="Remove player"
+              pending={pending}
+              onConfirm={() => {
+                const target = removing;
+                if (!target) return;
+                startTransition(async () => {
+                  await removeMember(campaign.id, target.userId);
+                  setRemoving(null);
+                });
+              }}
+            />
+          </div>
+        )}
 
         <div>
           <span className="font-semibold">API keys</span>

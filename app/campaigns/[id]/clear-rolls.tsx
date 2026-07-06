@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { clearRolls } from "@/app/actions/campaigns";
 import { Button } from "@/components/ui/button";
+import { ConfirmDialog } from "@/components/confirm-dialog";
 import {
   Select,
   SelectContent,
@@ -32,6 +33,7 @@ export function ClearRolls({
   );
   const [date, setDate] = useState<string>(NONE);
   const [result, setResult] = useState<string | null>(null);
+  const [confirming, setConfirming] = useState(false);
 
   // Players must pick one of their own characters; only the GM gets "any".
   const actorItems = [
@@ -87,28 +89,37 @@ export function ClearRolls({
           variant="destructive"
           size="sm"
           disabled={pending || nothingPicked}
-          onClick={() => {
-            const what = [
-              actorFid !== NONE ? actorItems.find((a) => a.value === actorFid)?.label : null,
-              date !== NONE ? sessionItems.find((s) => s.value === date)?.label : null,
-            ]
-              .filter(Boolean)
-              .join(" · ");
-            if (!window.confirm(`Delete all rolls for: ${what}? This can't be undone from the UI.`))
-              return;
-            startTransition(async () => {
-              const { cleared } = await clearRolls(campaignId, {
-                actorFid: actorFid === NONE ? null : actorFid,
-                date: date === NONE ? null : date,
-              });
-              setResult(`${cleared} message${cleared === 1 ? "" : "s"} cleared`);
-            });
-          }}
+          onClick={() => setConfirming(true)}
         >
           {pending ? "Clearing…" : "Delete matching rolls"}
         </Button>
         {result && <span className="text-muted-foreground">{result}</span>}
       </div>
+      <ConfirmDialog
+        open={confirming}
+        onOpenChange={setConfirming}
+        title="Delete matching rolls?"
+        description={`All rolls for ${
+          [
+            actorFid !== NONE ? actorItems.find((a) => a.value === actorFid)?.label : null,
+            date !== NONE ? sessionItems.find((s) => s.value === date)?.label : null,
+          ]
+            .filter(Boolean)
+            .join(" · ") || "this selection"
+        } will be removed. This can't be undone from the UI.`}
+        confirmLabel="Delete rolls"
+        pending={pending}
+        onConfirm={() =>
+          startTransition(async () => {
+            const { cleared } = await clearRolls(campaignId, {
+              actorFid: actorFid === NONE ? null : actorFid,
+              date: date === NONE ? null : date,
+            });
+            setResult(`${cleared} message${cleared === 1 ? "" : "s"} cleared`);
+            setConfirming(false);
+          })
+        }
+      />
     </div>
   );
 }

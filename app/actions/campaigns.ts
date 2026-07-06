@@ -10,6 +10,7 @@ import {
   requireCreator,
   requireMember,
   requireUserId,
+  touchCampaign,
 } from "@/lib/campaigns";
 
 // Server actions are untrusted entry points (reachable as POSTs without the
@@ -47,6 +48,7 @@ export async function joinCampaign(inviteCode: string): Promise<void> {
     update: {},
     create: { campaignId: campaign.id, userId, role: "player" },
   });
+  await touchCampaign(campaign.id);
   redirect(`/campaigns/${campaign.id}`);
 }
 
@@ -56,7 +58,10 @@ export async function updateCampaign(campaignId: string, formData: FormData): Pr
   await requireCreator(campaignId, userId);
   const name = nameSchema.parse(formData.get("name"));
   const image = z.string().trim().max(500).default("").parse(formData.get("image") ?? "");
-  await prisma.campaign.update({ where: { id: campaignId }, data: { name, image } });
+  await prisma.campaign.update({
+    where: { id: campaignId },
+    data: { name, image, activityAt: new Date() },
+  });
   revalidatePath(`/campaigns/${campaignId}`);
 }
 
@@ -93,6 +98,7 @@ export async function assignActor(actorId: string, assignedUserId: string | null
     if (!member) throw new Error("Not a member of this campaign");
   }
   await prisma.actor.update({ where: { id: actorId }, data: { assignedUserId } });
+  await touchCampaign(actor.campaignId);
   revalidatePath(`/campaigns/${actor.campaignId}`);
 }
 
@@ -107,13 +113,13 @@ export async function setHideDeathSaves(campaignId: string, hide: boolean): Prom
   if (hide) {
     await prisma.campaign.update({
       where: { id: campaignId },
-      data: { hideDeathSaves: true, hideDeathSavesSince: new Date() },
+      data: { hideDeathSaves: true, hideDeathSavesSince: new Date(), activityAt: new Date() },
     });
   } else {
     await prisma.$transaction([
       prisma.campaign.update({
         where: { id: campaignId },
-        data: { hideDeathSaves: false, hideDeathSavesSince: null },
+        data: { hideDeathSaves: false, hideDeathSavesSince: null, activityAt: new Date() },
       }),
       prisma.roll.updateMany({
         where: { campaignId, rollType: "death", isHidden: true },
@@ -230,7 +236,28 @@ export async function setActorKind(actorId: string, kind: string | null): Promis
     where: { id: actorId },
     data: { kindOverride: kindSchema.parse(kind) },
   });
+  await touchCampaign(actor.campaignId);
   revalidatePath(`/campaigns/${actor.campaignId}`);
+}
+
+/**
+ * Creator-only: remove a player from the campaign. Their character
+ * assignments are cleared (actors return to the GM's unassigned bucket);
+ * their rolls stay — history belongs to the campaign. The GM can't be removed.
+ */
+export async function removeMember(campaignId: string, memberUserId: string): Promise<void> {
+  const userId = await requireUserId();
+  const campaign = await requireCreator(campaignId, userId);
+  if (memberUserId === campaign.creatorId) throw new Error("The GM can't be removed");
+  await prisma.$transaction([
+    prisma.campaignMember.deleteMany({ where: { campaignId, userId: memberUserId } }),
+    prisma.actor.updateMany({
+      where: { campaignId, assignedUserId: memberUserId },
+      data: { assignedUserId: null },
+    }),
+  ]);
+  await touchCampaign(campaignId);
+  revalidatePath(`/campaigns/${campaignId}`);
 }
 
 /** Creator-only: revoke one key. Other keys keep working. */
