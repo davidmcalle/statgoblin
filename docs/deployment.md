@@ -1,70 +1,97 @@
-# Deployment — homelab VM (Podman + Quadlet)
+# StatGoblin deployment — homelab VM (Podman + Quadlet)
 
-The pod runs postgres + the app + Caddy in one network namespace. CI builds
+One pod: postgres + app + Caddy in a shared network namespace. CI builds
 `ghcr.io/davidmcalle/statgoblin:latest` on every push to main; the VM's
-`podman-auto-update` timer pulls it and restarts the pod — that's the deploy.
+`podman-auto-update` timer pulls it and restarts the pod. Deploy = merge.
 
-## One-time VM setup
+## 0. Credentials to generate & save (password manager)
 
-1. Prereqs: `podman` (4.4+ for quadlet). DNS: an A record for
-   `statgoblin.com` (and `www`) pointing at your public IP — if the home IP is
-   dynamic, use your registrar/DNS provider's update API or a cron'd updater.
-   Router forwards **80 and 443** to the VM (80 is needed for the ACME
-   HTTP-01 challenge and the https redirect).
+| Credential | Where it goes |
+|---|---|
+| Postgres password (generate one) | pod.yaml ×2 (`POSTGRES_PASSWORD` + inside `DATABASE_URL`), DataGrip |
+| Clerk secret key (`sk_…`) | pod.yaml `CLERK_SECRET_KEY` |
+| Clerk publishable key (`pk_…`) | pod.yaml + GitHub repo variable `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` (already set for dev) |
+| Campaign Admin API key | shown once when the campaign is created in the app → Foundry module settings |
 
-2. Files:
+## 1. DNS + router
 
-   ```sh
-   sudo mkdir -p /opt/statgoblin && sudo chown $USER /opt/statgoblin
-   git clone https://github.com/davidmcalle/statgoblin /opt/statgoblin-src
-   cp -r /opt/statgoblin-src/infra /opt/statgoblin/infra
-   ```
+- A record: `statgoblin.com` (and `www`) → your public IP. Dynamic IP → use
+  your DNS provider's update API on a cron.
+- Router: forward **80 and 443** → VM (80 = ACME HTTP-01 + https redirect).
+- Do **not** forward 5432 — it's LAN-only for DataGrip.
 
-3. Secrets — edit `/opt/statgoblin/infra/pod.yaml`, replacing every
-   `change-me`:
-   - Postgres password (twice: `POSTGRES_PASSWORD` and inside `DATABASE_URL`)
-   - `CLERK_SECRET_KEY` / `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` (Clerk dashboard)
+## 2. Clerk
 
-4. Quadlet + auto-update:
+- Dashboard → your app → **Configure → Email, phone, username → Personal
+  information → Name → Required.** Sign-up then collects first + last name
+  (the app shows players by first name).
+- Dev keys work anywhere (with a dev banner). For production keys later:
+  create a Production instance on statgoblin.com, swap the secret in
+  pod.yaml and update the GitHub repo variable, then re-run the workflow.
 
-   ```sh
-   mkdir -p ~/.config/containers/systemd
-   cp /opt/statgoblin/infra/statgoblin.kube ~/.config/containers/systemd/
-   systemctl --user daemon-reload
-   systemctl --user start statgoblin
-   systemctl --user enable --now podman-auto-update.timer
-   loginctl enable-linger $USER   # rootless pods survive logout/reboot
-   ```
+## 3. VM setup
 
-   Default auto-update cadence is daily; for faster deploys:
+```sh
+# prereqs: podman 4.4+
+sudo mkdir -p /opt/statgoblin && sudo chown $USER /opt/statgoblin
+git clone https://github.com/davidmcalle/statgoblin /opt/statgoblin-src
+cp -r /opt/statgoblin-src/infra /opt/statgoblin/infra
 
-   ```sh
-   systemctl --user edit podman-auto-update.timer
-   # [Timer]
-   # OnCalendar=
-   # OnCalendar=*:0/15
-   ```
+# edit secrets — replace every change-me:
+$EDITOR /opt/statgoblin/infra/pod.yaml
 
-5. Rootless low ports (80/443): `sudo sysctl net.ipv4.ip_unprivileged_port_start=80`
-   (persist in /etc/sysctl.d), or map to 8080/8443 in pod.yaml and translate at
-   the router.
+# rootless low ports for caddy (80/443):
+echo 'net.ipv4.ip_unprivileged_port_start=80' | sudo tee /etc/sysctl.d/50-unpriv-ports.conf
+sudo sysctl --system
 
-## Verify
+# quadlet + autostart + auto-update:
+mkdir -p ~/.config/containers/systemd
+cp /opt/statgoblin/infra/statgoblin.kube ~/.config/containers/systemd/
+systemctl --user daemon-reload
+systemctl --user start statgoblin
+systemctl --user enable --now podman-auto-update.timer
+loginctl enable-linger $USER
+```
 
-- `https://statgoblin.com` loads, sign-in works.
-- Migrations applied automatically (`podman logs statgoblin-app` shows
-  "applying migrations").
-- Foundry: module settings → Ingest URL `https://statgoblin.com/api/ingest`,
-  plus the campaign's Campaign ID + API key. Roll; the dashboard updates
-  within ~4s.
+Faster deploys than the daily default:
 
-## Operations
+```sh
+systemctl --user edit podman-auto-update.timer
+# [Timer]
+# OnCalendar=
+# OnCalendar=*:0/15
+```
 
-- Deploy = merge to main. CI pushes the image; the timer picks it up.
-- Manual deploy now: `podman auto-update` (as the pod user).
-- Logs: `podman logs -f statgoblin-app` (or `-caddy`, `-postgres`).
-- DB backup: `podman exec statgoblin-postgres pg_dump -U statgoblin statgoblin > backup.sql`
-- Clerk: dev-instance keys work anywhere (with a dev banner). For production
-  keys, create a Production instance in Clerk on statgoblin.com and swap both
-  keys (publishable also needs the GitHub repo variable
-  `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` updated, then rebuild).
+## 4. DataGrip
+
+New Data Source → PostgreSQL:
+
+- Host: `<VM LAN IP>` · Port: `5432`
+- Database / User: `statgoblin` · Password: the one you generated
+- URL form: `jdbc:postgresql://<VM-IP>:5432/statgoblin`
+
+Tables of interest: `raw_events` (immutable source of truth), `rolls` /
+`actors` (derived — rebuildable via `npm run reprocess`), `campaigns`,
+`campaign_members`, `api_keys` (sha256 only).
+
+## 5. Verify
+
+1. `https://statgoblin.com` loads; sign-up asks for first/last name.
+2. `podman logs statgoblin-app` shows "applying migrations" then "starting server".
+3. Create a campaign in the app → copy Campaign ID + Admin API key.
+4. Foundry (module **statgoblin**, manifest
+   `https://github.com/davidmcalle/statgoblin-foundry-module/releases/latest/download/module.json`
+   — uninstall old rollwatch first):
+   - Ingest URL: `https://statgoblin.com/api/ingest`
+   - Campaign ID + Admin API Key from step 3
+5. Roll in Foundry → appears on the campaign page within ~4s.
+
+## 6. Operations
+
+- Deploy: merge to main (timer pulls), or `podman auto-update` for right-now.
+- Logs: `podman logs -f statgoblin-app` / `-caddy` / `-postgres`.
+- Backup: `podman exec statgoblin-postgres pg_dump -U statgoblin statgoblin > statgoblin-$(date +%F).sql`
+- Derived-table rebuild after parser changes ships automatically (ingest
+  derives incrementally); full rebuild needs a shell:
+  `podman exec statgoblin-app node node_modules/prisma/build/index.js migrate status`
+  then reprocess from a dev machine pointed at the prod DATABASE_URL.

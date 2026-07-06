@@ -18,6 +18,10 @@ spec:
   containers:
     - name: postgres
       image: docker.io/library/postgres:16
+      # 5432 exposed on the VM for LAN tooling (DataGrip, psql, backups).
+      # Keep it firewalled to the LAN — do NOT forward it at the router.
+      ports:
+        - { containerPort: 5432, hostPort: 5432 }
       env:
         - { name: POSTGRES_USER, value: statgoblin }
         - { name: POSTGRES_PASSWORD, value: change-me }

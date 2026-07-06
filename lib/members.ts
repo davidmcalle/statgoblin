@@ -15,12 +15,15 @@ export async function campaignMembers(campaignId: string): Promise<MemberInfo[]>
     userId: members.map((m) => m.userId),
     limit: members.length,
   });
+  // First name is the display name at the table ("Jake", not an email).
+  // Fallbacks cover accounts created before name capture was required; the
+  // email local-part beats showing a full address in a dropdown.
   const nameOf = new Map(
     users.map((u) => [
       u.id,
-      [u.firstName, u.lastName].filter(Boolean).join(" ") ||
+      u.firstName ||
         u.username ||
-        u.emailAddresses[0]?.emailAddress ||
+        u.emailAddresses[0]?.emailAddress.split("@")[0] ||
         "Unknown",
     ]),
   );
