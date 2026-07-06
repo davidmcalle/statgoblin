@@ -9,6 +9,8 @@ const isPublicRoute = createRouteMatcher([
   "/sign-in(.*)",
   "/sign-up(.*)",
   "/join/(.*)",
+  // Fixture sandbox; the page itself 404s outside development.
+  "/dev/(.*)",
 ]);
 
 export default clerkMiddleware(async (auth, req) => {
