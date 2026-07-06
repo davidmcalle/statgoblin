@@ -34,12 +34,19 @@ export default async function HomePage() {
 
   const memberships = await prisma.campaignMember.findMany({
     where: { userId },
-    include: { campaign: { include: { _count: { select: { events: true, members: true } } } } },
+    include: {
+      campaign: {
+        include: {
+          // Deleted/cleared rolls shouldn't count toward the card's tally.
+          _count: { select: { events: { where: { deletedAt: null } }, members: true } },
+        },
+      },
+    },
     orderBy: { joinedAt: "desc" },
   });
 
   return (
-    <main className="mx-auto w-full max-w-3xl flex-1 p-6">
+    <main className="mx-auto w-full max-w-4xl flex-1 p-6">
       <h1 className="mb-6 text-2xl font-bold">Your campaigns</h1>
       {memberships.length === 0 && (
         <p className="mb-6 text-muted-foreground">
@@ -55,17 +62,18 @@ export default async function HomePage() {
             >
               {campaign.image ? (
                 // eslint-disable-next-line @next/next/no-img-element
-                <img src={campaign.image} alt="" className="h-12 w-12 rounded object-cover" />
+                <img src={campaign.image} alt="" className="h-12 w-12 rounded-lg object-cover" />
               ) : (
-                <span className="flex h-12 w-12 items-center justify-center rounded bg-muted text-2xl bg-muted">
-                  🎲
+                <span className="flex h-12 w-12 items-center justify-center rounded-lg bg-gradient-to-br from-primary/20 to-primary/5 text-lg font-bold">
+                  {campaign.name.slice(0, 1)}
                 </span>
               )}
               <span className="flex-1">
                 <span className="block font-semibold">{campaign.name}</span>
                 <span className="text-sm text-muted-foreground">
-                  {role === "gm" ? "GM" : "Player"} · {campaign._count.members} members ·{" "}
-                  {campaign._count.events} rolls
+                  {role === "gm" ? "GM" : "Player"} · {campaign._count.members} member
+                  {campaign._count.members === 1 ? "" : "s"} · {campaign._count.events} roll
+                  {campaign._count.events === 1 ? "" : "s"}
                 </span>
               </span>
             </Link>
