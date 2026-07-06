@@ -27,12 +27,12 @@ export default async function RootLayout({
 }>) {
   const { userId } = await auth();
   return (
-    <ClerkProvider>
-      <html
-        lang="en"
-        className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
-      >
-        <body className="min-h-full flex flex-col">
+    <html
+      lang="en"
+      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+    >
+      <body className="min-h-full flex flex-col">
+        <ClerkProvider>
           <header className="flex items-center justify-between border-b border-gray-200 px-6 py-3 dark:border-gray-800">
             <Link href="/" className="text-lg font-bold">
               🎲 Rollwatch
@@ -40,8 +40,8 @@ export default async function RootLayout({
             {userId && <UserButton />}
           </header>
           {children}
-        </body>
-      </html>
-    </ClerkProvider>
+        </ClerkProvider>
+      </body>
+    </html>
   );
 }
