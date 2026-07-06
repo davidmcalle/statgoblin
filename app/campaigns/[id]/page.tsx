@@ -3,13 +3,29 @@ import { prisma } from "@/lib/db/prisma";
 import { requireUserId } from "@/lib/campaigns";
 import { CampaignSettings } from "./settings";
 import { LiveRefresh } from "./live-refresh";
-import { actorStats, d20Histogram, recentDeathSaves, rollTypeCounts } from "@/lib/stats";
+import {
+  actorSkillMatrix,
+  actorStats,
+  campaignTotals,
+  d20Histogram,
+  recentDeathSaves,
+  rollTypeCounts,
+  skillAbilityBuckets,
+} from "@/lib/stats";
 import {
   ActorStatsTable,
   D20HistogramPanel,
   DeathSavesPanel,
   RollTypePanel,
 } from "./stats-panels";
+import { BubblePack, DicePacts, RadarChart, StatCards, type Bubble } from "./charts";
+import {
+  ABILITY_COLORS,
+  ABILITY_NAMES,
+  SKILL_ABILITY,
+  SKILL_NAMES,
+  characterColors,
+} from "@/lib/dnd5e-meta";
 
 export const dynamic = "force-dynamic";
 
@@ -36,17 +52,63 @@ export default async function CampaignPage({ params }: { params: Promise<{ id: s
   const campaign = member.campaign;
   const isCreator = campaign.creatorId === userId;
 
-  const [events, stats, histogram, types, deathSaves] = await Promise.all([
-    prisma.rawEvent.findMany({
-      where: { campaignId: id, deletedAt: null },
-      orderBy: { updatedAt: "desc" },
-      take: 50,
-    }),
-    actorStats(id),
-    d20Histogram(id),
-    rollTypeCounts(id),
-    recentDeathSaves(id),
-  ]);
+  const [events, stats, histogram, types, deathSaves, totals, skillBuckets, skillMatrix] =
+    await Promise.all([
+      prisma.rawEvent.findMany({
+        where: { campaignId: id, deletedAt: null },
+        orderBy: { updatedAt: "desc" },
+        take: 50,
+      }),
+      actorStats(id),
+      d20Histogram(id),
+      rollTypeCounts(id),
+      recentDeathSaves(id),
+      campaignTotals(id),
+      skillAbilityBuckets(id),
+      actorSkillMatrix(id),
+    ]);
+
+  const colors = characterColors(stats.map((s) => s.actorName));
+  const fallback = "#6b7280";
+
+  const skillBubbles: Bubble[] = skillBuckets.map((b) => {
+    const ability = b.isSkill ? (SKILL_ABILITY[b.key] ?? b.ability) : b.key;
+    const label = b.isSkill ? (SKILL_NAMES[b.key] ?? b.key) : (ABILITY_NAMES[b.key] ?? b.key);
+    return {
+      label,
+      value: b.count,
+      color: ABILITY_COLORS[ability ?? ""] ?? fallback,
+      tooltip: `${label}: ${b.count} rolls`,
+    };
+  });
+  const abilitiesInUse = [
+    ...new Set(
+      skillBuckets.map((b) => (b.isSkill ? (SKILL_ABILITY[b.key] ?? b.ability) : b.key)),
+    ),
+  ].filter((a): a is string => !!a && !!ABILITY_NAMES[a]);
+
+  const characterBubbles: Bubble[] = stats.map((s) => ({
+    label: s.actorName,
+    value: s.allRolls,
+    color: colors.get(s.actorName) ?? fallback,
+    tooltip: `${s.actorName}: ${s.allRolls} rolls`,
+  }));
+
+  const pactRows = stats
+    .filter((s) => s.d20Rolls > 0)
+    .map((s) => ({
+      name: s.actorName,
+      color: colors.get(s.actorName) ?? fallback,
+      nat20Rate: s.nat20s / s.d20Rolls,
+      nat1Rate: s.nat1s / s.d20Rolls,
+    }));
+
+  const radarSeries = skillMatrix.actors.map((a) => ({
+    name: a.name,
+    color: colors.get(a.name) ?? fallback,
+    values: a.counts,
+  }));
+  const radarAxes = skillMatrix.skills.map((s) => SKILL_NAMES[s] ?? s);
 
   return (
     <main className="mx-auto w-full max-w-4xl flex-1 p-6">
@@ -70,6 +132,26 @@ export default async function CampaignPage({ params }: { params: Promise<{ id: s
       </div>
 
       <div className="mb-6 grid gap-4">
+        <StatCards
+          totalRolls={totals.totalRolls}
+          nat20s={totals.nat20s}
+          nat1s={totals.nat1s}
+          avgD20={totals.avgD20}
+          highest={totals.highest}
+        />
+        <BubblePack
+          title="Dice by ability & skill"
+          bubbles={skillBubbles}
+          legend={abilitiesInUse.map((a) => ({
+            label: ABILITY_NAMES[a],
+            color: ABILITY_COLORS[a],
+          }))}
+        />
+        <DicePacts rows={pactRows} />
+        <div className="grid gap-4 lg:grid-cols-2">
+          <BubblePack title="Rolls by character" bubbles={characterBubbles} />
+          <RadarChart title="Skill checks" axes={radarAxes} series={radarSeries} />
+        </div>
         <ActorStatsTable stats={stats} />
         <div className="grid gap-4 sm:grid-cols-2">
           <D20HistogramPanel buckets={histogram} />
