@@ -14,6 +14,8 @@ import {
   skillAbilityBuckets,
   type StatFilters,
 } from "@/lib/stats";
+import { actorFidsForKind } from "@/lib/stats";
+import { effectiveKind } from "@/lib/kind";
 import { campaignMembers } from "@/lib/members";
 import { SKILL_NAMES as SKILL_LABELS } from "@/lib/dnd5e-meta";
 import { CharacterCard, type CharacterCardData } from "./character-cards";
@@ -74,11 +76,13 @@ export default async function CampaignPage({
   const isCreator = campaign.creatorId === userId;
 
   const days = sp.days ? Number(sp.days) : undefined;
+  const kind = ["pc", "npc", "monster"].includes(sp.kind ?? "") ? sp.kind : undefined;
   const filters: StatFilters = {
     actor: sp.actor || undefined,
     type: sp.type || undefined,
     days: days && Number.isFinite(days) ? days : undefined,
-    kind: sp.kind === "pc" || sp.kind === "npc" ? sp.kind : undefined,
+    // Kind is an actors-table property (override + auto rule); resolve to ids.
+    actorFids: kind ? await actorFidsForKind(id, kind) : undefined,
   };
 
   const [
@@ -129,6 +133,8 @@ export default async function CampaignPage({
     color: colors.get(a.name) ?? FALLBACK,
     actorType: a.actorType,
     cr: a.cr,
+    kind: effectiveKind(a),
+    kindOverride: a.kindOverride,
     assignedUserId: a.assignedUserId,
     stats: statsByName.get(a.name) ?? null,
     tops: topsByName.get(a.name)
@@ -142,14 +148,16 @@ export default async function CampaignPage({
   });
   const byRolls = (x: CharacterCardData, y: CharacterCardData) =>
     (y.stats?.allRolls ?? 0) - (x.stats?.allRolls ?? 0);
-  // PCs: assigned to a player, or typed "character" by dnd5e. Everything else
-  // is the GM's monster/NPC bucket.
-  const isPc = (a: (typeof actors)[number]) => !!a.assignedUserId || a.actorType === "character";
+  // Party row = effective pc; everything else (monsters + friendly NPCs) lives
+  // in the GM's browser, badges telling them apart.
   const pcCards = actors
-    .filter(isPc)
+    .filter((a) => effectiveKind(a) === "pc")
     .map(cardOf)
     .sort((x, y) => Number(y.assignedUserId === userId) - Number(x.assignedUserId === userId) || byRolls(x, y));
-  const monsterCards = actors.filter((a) => !isPc(a)).map(cardOf).sort(byRolls);
+  const monsterCards = actors
+    .filter((a) => effectiveKind(a) !== "pc")
+    .map(cardOf)
+    .sort(byRolls);
 
   const skillBars: NamedCount[] = skillBuckets.map((b) => {
     const ability = b.isSkill ? (SKILL_ABILITY[b.key] ?? b.ability) : b.key;

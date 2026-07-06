@@ -138,6 +138,11 @@ model Actor {
   image          String   @default("")
   // "character" | "npc"; drives the automatic PC vs monster bucketing.
   actorType      String?  @map("actor_type")
+  // Manual GM tag overriding the automatic kind: "pc" | "npc" | "monster".
+  // Auto rule: assigned or typed character → pc; everything else → monster.
+  // "npc" (friendly) exists only as an override — the payload can't tell
+  // friend from foe.
+  kindOverride   String?  @map("kind_override")
   // Challenge rating, npc sheets only.
   cr             Float?
   assignedUserId String?  @map("assigned_user_id")

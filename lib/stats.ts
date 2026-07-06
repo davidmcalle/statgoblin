@@ -1,5 +1,6 @@
 import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/db/prisma";
+import { effectiveKind } from "@/lib/kind";
 
 // Dashboard aggregates over the derived rolls table, all filterable by
 // character, roll type, and recency. Raw SQL where Prisma's groupBy can't
@@ -9,31 +10,43 @@ export type StatFilters = {
   actor?: string;
   type?: string;
   days?: number;
-  /** "pc" (characters) | "npc" (monsters & NPCs). */
-  kind?: string;
+  /**
+   * Foundry actor ids to include — the resolved form of a kind filter
+   * (pc/npc/monster). Kind is an actors-table property (override + auto rule),
+   * so callers resolve it to ids via actorFidsForKind before querying rolls.
+   */
+  actorFids?: string[];
 };
 
-const KIND_TYPE: Record<string, string> = { pc: "character", npc: "npc" };
+/** Resolve a kind (pc/npc/monster) to the campaign's matching actor fids. */
+export async function actorFidsForKind(
+  campaignId: string,
+  kind: string,
+): Promise<string[]> {
+  const actors = await prisma.actor.findMany({
+    where: { campaignId },
+    select: { foundryActorId: true, kindOverride: true, assignedUserId: true, actorType: true },
+  });
+  return actors.filter((a) => effectiveKind(a) === kind).map((a) => a.foundryActorId);
+}
 
 function sqlFilters(campaignId: string, f: StatFilters): Prisma.Sql {
-  const kindType = f.kind ? KIND_TYPE[f.kind] : undefined;
   return Prisma.sql`
     campaign_id = ${campaignId}::uuid
     AND deleted_at IS NULL
     ${f.actor ? Prisma.sql`AND actor_name = ${f.actor}` : Prisma.empty}
     ${f.type ? Prisma.sql`AND roll_type = ${f.type}` : Prisma.empty}
-    ${kindType ? Prisma.sql`AND actor_type = ${kindType}` : Prisma.empty}
+    ${f.actorFids ? Prisma.sql`AND actor_fid = ANY(${f.actorFids})` : Prisma.empty}
     ${f.days ? Prisma.sql`AND rolled_at > now() - make_interval(days => ${f.days})` : Prisma.empty}`;
 }
 
 function whereFilters(campaignId: string, f: StatFilters) {
-  const kindType = f.kind ? KIND_TYPE[f.kind] : undefined;
   return {
     campaignId,
     deletedAt: null,
     ...(f.actor ? { actorName: f.actor } : {}),
     ...(f.type ? { rollType: f.type } : {}),
-    ...(kindType ? { actorType: kindType } : {}),
+    ...(f.actorFids ? { actorFid: { in: f.actorFids } } : {}),
     ...(f.days ? { rolledAt: { gt: new Date(Date.now() - f.days * 86_400_000) } } : {}),
   };
 }

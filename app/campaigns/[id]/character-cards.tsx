@@ -3,6 +3,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import type { ActorStats, ActorTop } from "@/lib/stats";
 import type { MemberInfo } from "@/lib/members";
 import { AssignControl } from "./assign-control";
+import { KindControl } from "./kind-control";
+import type { ActorKind } from "@/lib/kind";
 
 export type CharacterCardData = {
   actorId: string | null; // actors-table id (null if not yet discovered there)
@@ -11,6 +13,8 @@ export type CharacterCardData = {
   color: string;
   actorType: string | null;
   cr: number | null;
+  kind: ActorKind;
+  kindOverride: string | null;
   assignedUserId: string | null;
   stats: ActorStats | null;
   tops: ActorTop | null;
@@ -65,10 +69,9 @@ export function CharacterCard({
           <div className="mt-0.5 flex flex-wrap items-center gap-1.5">
             {isOwn && <Badge>You</Badge>}
             {!isOwn && ownerName && <Badge variant="secondary">{ownerName}</Badge>}
-            {!ownerName && data.actorType !== "npc" && (
-              <Badge variant="outline">Unassigned</Badge>
-            )}
-            {data.actorType === "npc" && <Badge variant="destructive">Monster</Badge>}
+            {data.kind === "pc" && !ownerName && <Badge variant="outline">Unassigned</Badge>}
+            {data.kind === "monster" && <Badge variant="destructive">Monster</Badge>}
+            {data.kind === "npc" && <Badge variant="secondary">NPC</Badge>}
             {data.cr !== null && <Badge variant="outline">CR {crLabel(data.cr)}</Badge>}
           </div>
         </div>
@@ -106,11 +109,14 @@ export function CharacterCard({
           </p>
         )}
         {canAssign && data.actorId && (
-          <AssignControl
-            actorId={data.actorId}
-            assignedUserId={data.assignedUserId}
-            members={members}
-          />
+          <div className="grid grid-cols-2 gap-2">
+            <AssignControl
+              actorId={data.actorId}
+              assignedUserId={data.assignedUserId}
+              members={members}
+            />
+            <KindControl actorId={data.actorId} kindOverride={data.kindOverride} />
+          </div>
         )}
       </CardContent>
     </Card>

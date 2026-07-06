@@ -21,7 +21,8 @@ const ALL = "__all__";
 
 const KINDS = [
   { value: "pc", label: "Player characters" },
-  { value: "npc", label: "Monsters & NPCs" },
+  { value: "npc", label: "NPCs" },
+  { value: "monster", label: "Monsters" },
 ];
 
 // URL-param driven filters: the server page re-queries on navigation, so
@@ -48,7 +49,7 @@ export function FilterBar({
   };
 
   const hasFilters = !!(current.actor || current.type || current.days || current.kind);
-  const kindItems = [{ value: ALL, label: "PCs & monsters" }, ...KINDS];
+  const kindItems = [{ value: ALL, label: "Everyone" }, ...KINDS];
 
   const actorItems = [
     { value: ALL, label: "All characters" },

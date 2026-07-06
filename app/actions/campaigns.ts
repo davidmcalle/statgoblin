@@ -95,6 +95,21 @@ export async function assignActor(actorId: string, assignedUserId: string | null
   revalidatePath(`/campaigns/${actor.campaignId}`);
 }
 
+const kindSchema = z.enum(["pc", "npc", "monster"]).nullable();
+
+/** Creator-only: tag an actor's kind (pc/npc/monster), or null for automatic. */
+export async function setActorKind(actorId: string, kind: string | null): Promise<void> {
+  const userId = await requireUserId();
+  const actor = await prisma.actor.findUnique({ where: { id: actorId } });
+  if (!actor) return;
+  await requireCreator(actor.campaignId, userId);
+  await prisma.actor.update({
+    where: { id: actorId },
+    data: { kindOverride: kindSchema.parse(kind) },
+  });
+  revalidatePath(`/campaigns/${actor.campaignId}`);
+}
+
 /** Creator-only: revoke one key. Other keys keep working. */
 export async function deleteApiKey(keyId: string): Promise<void> {
   const userId = await requireUserId();
