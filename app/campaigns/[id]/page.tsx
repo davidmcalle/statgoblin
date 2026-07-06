@@ -3,6 +3,13 @@ import { prisma } from "@/lib/db/prisma";
 import { requireUserId } from "@/lib/campaigns";
 import { CampaignSettings } from "./settings";
 import { LiveRefresh } from "./live-refresh";
+import { actorStats, d20Histogram, recentDeathSaves, rollTypeCounts } from "@/lib/stats";
+import {
+  ActorStatsTable,
+  D20HistogramPanel,
+  DeathSavesPanel,
+  RollTypePanel,
+} from "./stats-panels";
 
 export const dynamic = "force-dynamic";
 
@@ -29,11 +36,17 @@ export default async function CampaignPage({ params }: { params: Promise<{ id: s
   const campaign = member.campaign;
   const isCreator = campaign.creatorId === userId;
 
-  const events = await prisma.rawEvent.findMany({
-    where: { campaignId: id, deletedAt: null },
-    orderBy: { updatedAt: "desc" },
-    take: 50,
-  });
+  const [events, stats, histogram, types, deathSaves] = await Promise.all([
+    prisma.rawEvent.findMany({
+      where: { campaignId: id, deletedAt: null },
+      orderBy: { updatedAt: "desc" },
+      take: 50,
+    }),
+    actorStats(id),
+    d20Histogram(id),
+    rollTypeCounts(id),
+    recentDeathSaves(id),
+  ]);
 
   return (
     <main className="mx-auto w-full max-w-4xl flex-1 p-6">
@@ -54,6 +67,15 @@ export default async function CampaignPage({ params }: { params: Promise<{ id: s
             {member.role === "gm" ? "you're the GM" : "player"}
           </p>
         </div>
+      </div>
+
+      <div className="mb-6 grid gap-4">
+        <ActorStatsTable stats={stats} />
+        <div className="grid gap-4 sm:grid-cols-2">
+          <D20HistogramPanel buckets={histogram} />
+          <RollTypePanel counts={types} />
+        </div>
+        <DeathSavesPanel saves={deathSaves} />
       </div>
 
       {isCreator && (
