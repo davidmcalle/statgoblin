@@ -1,5 +1,4 @@
 import { auth } from "@clerk/nextjs/server";
-import { SignInButton, SignUpButton } from "@clerk/nextjs";
 import Link from "next/link";
 import { prisma } from "@/lib/db/prisma";
 import { CreateCampaignForm } from "./_components/create-campaign-form";
@@ -17,16 +16,20 @@ export default async function HomePage() {
           the cursed luck. Sign in to start a campaign or join your table.
         </p>
         <div className="flex gap-3">
-          <SignInButton>
-            <button className="rounded-md bg-primary px-4 py-2 text-primary-foreground hover:bg-primary/90">
-              Sign in
-            </button>
-          </SignInButton>
-          <SignUpButton>
-            <button className="rounded-md border border-input px-4 py-2 border-input">
-              Sign up
-            </button>
-          </SignUpButton>
+          {/* Plain links — Clerk's SignInButton child-clone never attached its
+              click handler when wrapping a server-rendered button. */}
+          <Link
+            href="/sign-in"
+            className="rounded-md bg-primary px-4 py-2 text-primary-foreground hover:bg-primary/90"
+          >
+            Sign in
+          </Link>
+          <Link
+            href="/sign-up"
+            className="rounded-md border border-input px-4 py-2"
+          >
+            Sign up
+          </Link>
         </div>
       </main>
     );
@@ -46,7 +49,7 @@ export default async function HomePage() {
   });
 
   return (
-    <main className="mx-auto w-full max-w-4xl flex-1 p-6">
+    <main className="mx-auto w-full max-w-4xl flex-1 p-4 sm:p-6">
       <h1 className="mb-6 text-2xl font-bold">Your campaigns</h1>
       {memberships.length === 0 && (
         <p className="mb-6 text-muted-foreground">
