@@ -58,7 +58,29 @@ export function BubblePackCard({
         >
           {laid.leaves().map((node, i) => {
             const d = node.data as BubbleDatum;
-            const fontSize = Math.max(11, Math.min(24, node.r / 3.2));
+            // Fit the label inside the circle: split long names onto two
+            // lines, then size the font so the widest line spans ≤ ~85% of
+            // the diameter (rough glyph width ≈ 0.6em). Too small → no label,
+            // the hover/tooltip still identifies the bubble.
+            const words = d.name.split(" ");
+            let lines: string[] = [d.name];
+            if (words.length > 1 && d.name.length > 10) {
+              let best = 1;
+              let bestDiff = Infinity;
+              for (let s = 1; s < words.length; s++) {
+                const a = words.slice(0, s).join(" ").length;
+                const b = words.slice(s).join(" ").length;
+                const diff = Math.abs(a - b);
+                if (diff < bestDiff) {
+                  bestDiff = diff;
+                  best = s;
+                }
+              }
+              lines = [words.slice(0, best).join(" "), words.slice(best).join(" ")];
+            }
+            const maxLen = Math.max(...lines.map((l) => l.length));
+            const fontSize = Math.min(24, node.r / 3.2, (node.r * 1.7) / (maxLen * 0.6));
+            const showLabel = fontSize >= 9;
             return (
               <g
                 key={i}
@@ -71,18 +93,21 @@ export function BubblePackCard({
                   fill={d.color}
                   opacity={hover && hover.name !== d.name ? 0.45 : 1}
                 />
-                {node.r > 26 && (
-                  <text
-                    textAnchor="middle"
-                    dominantBaseline="central"
-                    fill="white"
-                    fontSize={fontSize}
-                    fontWeight={600}
-                    style={{ pointerEvents: "none" }}
-                  >
-                    {d.name}
-                  </text>
-                )}
+                {showLabel &&
+                  lines.map((line, li) => (
+                    <text
+                      key={li}
+                      textAnchor="middle"
+                      dominantBaseline="central"
+                      y={(li - (lines.length - 1) / 2) * fontSize * 1.15}
+                      fill="white"
+                      fontSize={fontSize}
+                      fontWeight={600}
+                      style={{ pointerEvents: "none" }}
+                    >
+                      {line}
+                    </text>
+                  ))}
               </g>
             );
           })}
