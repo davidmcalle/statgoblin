@@ -272,7 +272,8 @@ export default async function CampaignPage({
           rows={logRows}
           colors={colors}
           images={new Map(actors.filter((a) => a.image).map((a) => [a.name, a.image]))}
-          canDelete={isCreator}
+          isCreator={isCreator}
+          ownedFids={actors.filter((a) => a.assignedUserId === userId).map((a) => a.foundryActorId)}
         />
       )}
 
@@ -345,15 +346,14 @@ export default async function CampaignPage({
         </>
       )}
 
-      {isCreator && (
-        <ClearRolls
-          campaignId={id}
-          actors={actors
-            .map((a) => ({ fid: a.foundryActorId, name: a.name }))
-            .sort((x, y) => x.name.localeCompare(y.name))}
-          sessions={sessionList}
-        />
-      )}
+      <ClearRolls
+        campaignId={id}
+        isCreator={isCreator}
+        actors={(isCreator ? actors : actors.filter((a) => a.assignedUserId === userId))
+          .map((a) => ({ fid: a.foundryActorId, name: a.name }))
+          .sort((x, y) => x.name.localeCompare(y.name))}
+        sessions={sessionList}
+      />
 
       {isCreator && (
         <CampaignSettings

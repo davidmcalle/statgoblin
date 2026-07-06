@@ -190,13 +190,16 @@ export function RollLog({
   rows,
   colors,
   images,
-  canDelete = false,
+  isCreator = false,
+  ownedFids = [],
 }: {
   rows: RollLogRow[];
   colors: Map<string, string>;
   images: Map<string, string>;
-  canDelete?: boolean;
+  isCreator?: boolean;
+  ownedFids?: string[];
 }) {
+  const owned = new Set(ownedFids);
   if (rows.length === 0) {
     return (
       <p className="py-12 text-center text-muted-foreground">
@@ -305,7 +308,9 @@ export function RollLog({
                   <div className="w-12 text-right text-xs text-muted-foreground">
                     {r.rolledAt.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}
                   </div>
-                  {canDelete && <DeleteRollButton rollId={r.id} />}
+                  {(isCreator || (r.actorFid && owned.has(r.actorFid))) && (
+                    <DeleteRollButton rollId={r.id} />
+                  )}
                 </li>
               );
             })}

@@ -18,18 +18,24 @@ export function ClearRolls({
   campaignId,
   actors,
   sessions,
+  isCreator = false,
 }: {
   campaignId: string;
   actors: { fid: string; name: string }[];
   sessions: { n: number; date: string }[];
+  isCreator?: boolean;
 }) {
   const [pending, startTransition] = useTransition();
-  const [actorFid, setActorFid] = useState<string>(NONE);
+  // Players start on their (usually only) character; the GM starts on "any".
+  const [actorFid, setActorFid] = useState<string>(() =>
+    !isCreator && actors[0] ? actors[0].fid : NONE,
+  );
   const [date, setDate] = useState<string>(NONE);
   const [result, setResult] = useState<string | null>(null);
 
+  // Players must pick one of their own characters; only the GM gets "any".
   const actorItems = [
-    { value: NONE, label: "Any character" },
+    ...(isCreator ? [{ value: NONE, label: "Any character" }] : []),
     ...actors.map((a) => ({ value: a.fid, label: a.name })),
   ];
   const sessionItems = [
@@ -42,14 +48,15 @@ export function ClearRolls({
         label: `Session ${s.n} — ${new Date(`${s.date}T00:00:00Z`).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}`,
       })),
   ];
-  const nothingPicked = actorFid === NONE && date === NONE;
+  const nothingPicked = isCreator ? actorFid === NONE && date === NONE : actorFid === NONE;
+  if (actors.length === 0 && !isCreator) return null;
 
   return (
     <div className="rounded-md border border-destructive/40 p-3">
       <span className="font-semibold">Clear rolls</span>
       <p className="mb-2 text-muted-foreground">
         Soft-deletes matching rolls (and their messages) — stats drop them instantly, sessions
-        renumber. Pick a character, a session, or both.
+        renumber. {isCreator ? "Pick a character, a session, or both." : "Pick one of your characters (and optionally a session)."}
       </p>
       <div className="flex flex-wrap items-center gap-2">
         <Select items={actorItems} value={actorFid} onValueChange={(v) => setActorFid(v ?? NONE)}>

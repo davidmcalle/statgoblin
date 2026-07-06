@@ -8,6 +8,7 @@ import {
   generateIngestKey,
   generateInviteCode,
   requireCreator,
+  requireMember,
   requireUserId,
 } from "@/lib/campaigns";
 
@@ -123,6 +124,15 @@ export async function setHideDeathSaves(campaignId: string, hide: boolean): Prom
   revalidatePath(`/campaigns/${campaignId}`);
 }
 
+/** Foundry actor ids of the characters assigned to a user in a campaign. */
+async function ownedActorFids(campaignId: string, userId: string): Promise<Set<string>> {
+  const actors = await prisma.actor.findMany({
+    where: { campaignId, assignedUserId: userId },
+    select: { foundryActorId: true },
+  });
+  return new Set(actors.map((a) => a.foundryActorId));
+}
+
 /** Recount actors' live rolls after bulk deletions. */
 async function recountActors(campaignId: string): Promise<void> {
   await prisma.$executeRaw`
@@ -142,7 +152,14 @@ export async function deleteRoll(rollId: string): Promise<void> {
   const userId = await requireUserId();
   const roll = await prisma.roll.findUnique({ where: { id: rollId } });
   if (!roll) return;
-  await requireCreator(roll.campaignId, userId);
+  // GM deletes anything; a player only their own characters' rolls.
+  const member = await requireMember(roll.campaignId, userId);
+  if (member.campaign.creatorId !== userId) {
+    const owned = await ownedActorFids(roll.campaignId, userId);
+    if (!roll.actorFid || !owned.has(roll.actorFid)) {
+      throw new Error("You can only delete rolls made by your own characters");
+    }
+  }
   const now = new Date();
   await prisma.$transaction([
     prisma.rawEvent.update({ where: { id: roll.rawEventId }, data: { deletedAt: now } }),
@@ -162,10 +179,18 @@ export async function clearRolls(
   filters: { actorFid?: string | null; date?: string | null },
 ): Promise<{ cleared: number }> {
   const userId = await requireUserId();
-  await requireCreator(campaignId, userId);
+  const member = await requireMember(campaignId, userId);
+  const isCreator = member.campaign.creatorId === userId;
   const actorFid = filters.actorFid || undefined;
   const date = /^\d{4}-\d{2}-\d{2}$/.test(filters.date ?? "") ? filters.date! : undefined;
-  if (!actorFid && !date) throw new Error("Pick a character or a session first");
+  if (isCreator) {
+    if (!actorFid && !date) throw new Error("Pick a character or a session first");
+  } else {
+    // Players clear only their own characters' rolls.
+    if (!actorFid) throw new Error("Pick one of your characters");
+    const owned = await ownedActorFids(campaignId, userId);
+    if (!owned.has(actorFid)) throw new Error("Not your character");
+  }
 
   const dayStart = date ? new Date(`${date}T00:00:00Z`) : undefined;
   const targets = await prisma.roll.findMany({

@@ -471,6 +471,7 @@ export type RollLogRow = {
   rolledAt: Date;
   rollType: string;
   actorName: string | null;
+  actorFid: string | null;
   authorName: string | null;
   itemName: string | null;
   itemType: string | null;
@@ -502,6 +503,7 @@ export async function rollLog(
       rolledAt: true,
       rollType: true,
       actorName: true,
+      actorFid: true,
       authorName: true,
       itemName: true,
       itemType: true,

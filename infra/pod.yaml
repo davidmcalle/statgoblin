@@ -1,13 +1,12 @@
-# Podman pod: postgres + app + caddy sharing one network namespace, so the app
-# reaches Postgres and Caddy reaches the app over localhost.
+# Podman pod: postgres + app sharing one network namespace. TLS terminates on
+# archbox (Caddy, Cloudflare DNS-01); it reverse-proxies to this VM's :3000.
 #
 #   podman play kube infra/pod.yaml
 #
 # Replace the change-me values with real secrets before first start. The app
 # image auto-updates from GHCR via podman-auto-update (see the annotation);
-# migrations run automatically at container start. Caddy uses the stock image:
-# statgoblin.com gets its cert via the HTTP-01 challenge, so forward BOTH 80
-# and 443 to this VM.
+# migrations run automatically at container start. Postgres is NOT published —
+# DataGrip reaches it via an SSH tunnel to this VM (see docs/deployment.md).
 apiVersion: v1
 kind: Pod
 metadata:
@@ -18,10 +17,6 @@ spec:
   containers:
     - name: postgres
       image: docker.io/library/postgres:16
-      # 5432 exposed on the VM for LAN tooling (DataGrip, psql, backups).
-      # Keep it firewalled to the LAN — do NOT forward it at the router.
-      ports:
-        - { containerPort: 5432, hostPort: 5432 }
       env:
         - { name: POSTGRES_USER, value: statgoblin }
         - { name: POSTGRES_PASSWORD, value: change-me }
@@ -31,6 +26,8 @@ spec:
 
     - name: app
       image: ghcr.io/davidmcalle/statgoblin:latest
+      ports:
+        - { containerPort: 3000, hostPort: 3000 }
       env:
         - name: DATABASE_URL
           value: postgresql://statgoblin:change-me@localhost:5432/statgoblin?schema=public
@@ -39,24 +36,6 @@ spec:
         - name: NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY
           value: change-me
 
-    - name: caddy
-      image: docker.io/library/caddy:2
-      ports:
-        - { containerPort: 80, hostPort: 80 }
-        - { containerPort: 443, hostPort: 443 }
-      env:
-        - { name: SITE_ADDRESS, value: statgoblin.com }
-      volumeMounts:
-        - { name: caddyfile, mountPath: /etc/caddy/Caddyfile }
-        - { name: caddy-data, mountPath: /data }
-
   volumes:
     - name: pgdata
       persistentVolumeClaim: { claimName: statgoblin-pgdata }
-    - name: caddy-data
-      persistentVolumeClaim: { claimName: statgoblin-caddy-data }
-    - name: caddyfile
-      hostPath:
-        # Absolute path to infra/Caddyfile on the VM.
-        path: /opt/statgoblin/infra/Caddyfile
-        type: File

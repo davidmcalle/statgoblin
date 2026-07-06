@@ -1,97 +1,108 @@
-# StatGoblin deployment — homelab VM (Podman + Quadlet)
+# StatGoblin deployment — isolated VM (vmbr2) behind archbox + Cloudflare
 
-One pod: postgres + app + Caddy in a shared network namespace. CI builds
-`ghcr.io/davidmcalle/statgoblin:latest` on every push to main; the VM's
-`podman-auto-update` timer pulls it and restarts the pod. Deploy = merge.
+Architecture (owned by the infra runbook, summarized here):
 
-## 0. Credentials to generate & save (password manager)
+    Cloudflare (proxied, WAF) → UDR7 :80/:443 → archbox Caddy (TLS, CF DNS-01)
+      → routed via pve → statgoblin VM 10.99.98.10:3000 (vmbr2, default-drop
+        to all LANs; internet egress NAT'd for ghcr/Clerk only)
+
+This doc covers only what runs ON the statgoblin VM plus the app-specific
+bits (Clerk, DataGrip, Foundry). Bridge/firewall/route/Cloudflare stages live
+in the infra plan.
+
+## Credentials to generate & save
 
 | Credential | Where it goes |
 |---|---|
-| Postgres password (generate one) | pod.yaml ×2 (`POSTGRES_PASSWORD` + inside `DATABASE_URL`), DataGrip |
+| Postgres password (generate) | pod.yaml ×2 (`POSTGRES_PASSWORD` + `DATABASE_URL`), DataGrip |
 | Clerk secret key (`sk_…`) | pod.yaml `CLERK_SECRET_KEY` |
-| Clerk publishable key (`pk_…`) | pod.yaml + GitHub repo variable `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` (already set for dev) |
-| Campaign Admin API key | shown once when the campaign is created in the app → Foundry module settings |
+| Clerk publishable key (`pk_…`) | pod.yaml + GitHub repo variable `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` (already set for dev keys) |
+| Campaign Admin API key | shown once at campaign creation → Foundry module settings |
 
-## 1. DNS + router
+## Clerk (dashboard)
 
-- A record: `statgoblin.com` (and `www`) → your public IP. Dynamic IP → use
-  your DNS provider's update API on a cron.
-- Router: forward **80 and 443** → VM (80 = ACME HTTP-01 + https redirect).
-- Do **not** forward 5432 — it's LAN-only for DataGrip.
+- Configure → Email, phone, username → Personal information → **Name →
+  Required** (app displays players by first name).
+- Dev keys work behind the proxy (dev banner). Production instance on
+  statgoblin.com later: swap secret in pod.yaml, update the GitHub variable,
+  re-run the workflow.
 
-## 2. Clerk
-
-- Dashboard → your app → **Configure → Email, phone, username → Personal
-  information → Name → Required.** Sign-up then collects first + last name
-  (the app shows players by first name).
-- Dev keys work anywhere (with a dev banner). For production keys later:
-  create a Production instance on statgoblin.com, swap the secret in
-  pod.yaml and update the GitHub repo variable, then re-run the workflow.
-
-## 3. VM setup
+## VM setup (Ubuntu 24.04, 10.99.98.10)
 
 ```sh
-# prereqs: podman 4.4+
-sudo mkdir -p /opt/statgoblin && sudo chown $USER /opt/statgoblin
-git clone https://github.com/davidmcalle/statgoblin /opt/statgoblin-src
-cp -r /opt/statgoblin-src/infra /opt/statgoblin/infra
+# prereqs
+sudo apt update && sudo apt install -y podman git
 
-# edit secrets — replace every change-me:
+# files
+sudo mkdir -p /opt/statgoblin && sudo chown $USER /opt/statgoblin
+git clone https://github.com/davidmcalle/statgoblin /tmp/statgoblin-src
+cp -r /tmp/statgoblin-src/infra /opt/statgoblin/infra
+
+# secrets — replace every change-me:
 $EDITOR /opt/statgoblin/infra/pod.yaml
 
-# rootless low ports for caddy (80/443):
-echo 'net.ipv4.ip_unprivileged_port_start=80' | sudo tee /etc/sysctl.d/50-unpriv-ports.conf
-sudo sysctl --system
-
-# quadlet + autostart + auto-update:
+# quadlet + autostart + auto-update (app binds :3000; archbox proxies to it,
+# no low ports and no in-pod TLS, so no sysctl needed)
 mkdir -p ~/.config/containers/systemd
 cp /opt/statgoblin/infra/statgoblin.kube ~/.config/containers/systemd/
 systemctl --user daemon-reload
 systemctl --user start statgoblin
 systemctl --user enable --now podman-auto-update.timer
 loginctl enable-linger $USER
-```
 
-Faster deploys than the daily default:
-
-```sh
+# 15-minute deploy cadence
 systemctl --user edit podman-auto-update.timer
 # [Timer]
 # OnCalendar=
 # OnCalendar=*:0/15
 ```
 
-## 4. DataGrip
+## archbox Caddy block (reference — lives in archbox's Caddyfile)
 
-New Data Source → PostgreSQL:
+```
+statgoblin.com {
+	encode gzip
+	reverse_proxy 10.99.98.10:3000
+	tls {
+		dns cloudflare {$CF_API_TOKEN}
+	}
+}
+www.statgoblin.com {
+	redir https://statgoblin.com{uri} permanent
+}
+```
 
-- Host: `<VM LAN IP>` · Port: `5432`
-- Database / User: `statgoblin` · Password: the one you generated
-- URL form: `jdbc:postgresql://<VM-IP>:5432/statgoblin`
+## DataGrip (no LAN 5432 — SSH tunnel through pve)
 
-Tables of interest: `raw_events` (immutable source of truth), `rolls` /
-`actors` (derived — rebuildable via `npm run reprocess`), `campaigns`,
-`campaign_members`, `api_keys` (sha256 only).
+Data Source → PostgreSQL → SSH/SSL tab:
 
-## 5. Verify
+- Use SSH tunnel: host `192.168.0.226` (pve) as jump → `david@10.99.98.10`
+  (DataGrip supports one hop; if you need the jump, add a ~/.ssh/config entry
+  `Host statgoblin-vm  HostName 10.99.98.10  ProxyJump root@192.168.0.226`
+  and point DataGrip at `statgoblin-vm`)
+- Then General tab: host `localhost`, port `5432`, db/user `statgoblin`,
+  the generated password.
 
-1. `https://statgoblin.com` loads; sign-up asks for first/last name.
-2. `podman logs statgoblin-app` shows "applying migrations" then "starting server".
-3. Create a campaign in the app → copy Campaign ID + Admin API key.
+Postgres itself is never published beyond the pod's namespace… except
+localhost inside the VM, which the tunnel lands on.
+
+## Verify
+
+1. `https://statgoblin.com` loads (via Cloudflare + archbox), sign-up asks
+   for first/last name.
+2. `podman logs statgoblin-app` → "applying migrations" then "starting server".
+3. Create campaign → copy Campaign ID + Admin API key.
 4. Foundry (module **statgoblin**, manifest
    `https://github.com/davidmcalle/statgoblin-foundry-module/releases/latest/download/module.json`
-   — uninstall old rollwatch first):
-   - Ingest URL: `https://statgoblin.com/api/ingest`
-   - Campaign ID + Admin API Key from step 3
-5. Roll in Foundry → appears on the campaign page within ~4s.
+   — uninstall old rollwatch first): Ingest URL `https://statgoblin.com/api/ingest`
+   + both credentials. The module posts via Cloudflare's front door — VM
+   isolation needs no exception for Foundry.
+5. Roll → dashboard within ~4s.
 
-## 6. Operations
+## Operations
 
-- Deploy: merge to main (timer pulls), or `podman auto-update` for right-now.
-- Logs: `podman logs -f statgoblin-app` / `-caddy` / `-postgres`.
-- Backup: `podman exec statgoblin-postgres pg_dump -U statgoblin statgoblin > statgoblin-$(date +%F).sql`
-- Derived-table rebuild after parser changes ships automatically (ingest
-  derives incrementally); full rebuild needs a shell:
-  `podman exec statgoblin-app node node_modules/prisma/build/index.js migrate status`
-  then reprocess from a dev machine pointed at the prod DATABASE_URL.
+- Deploy: merge to main → CI pushes image → timer pulls within 15 min.
+  Right-now: `podman auto-update` on the VM.
+- Logs: `podman logs -f statgoblin-app` / `-postgres`.
+- Backup (from pve or via tunnel):
+  `podman exec statgoblin-postgres pg_dump -U statgoblin statgoblin > statgoblin-$(date +%F).sql`
