@@ -32,13 +32,12 @@ COPY --from=builder /app/.next/static ./.next/static
 COPY --from=builder /app/public ./public
 
 # Migration toolchain: prisma CLI + schema/migrations, run at container start
-# so the pod needs no manual migrate step.
+# so the pod needs no manual migrate step. The CLI drags a wide transitive
+# tree, so ship the full install — image size is a non-issue on the homelab
+# and it ends the missing-module whack-a-mole.
 COPY --from=builder /app/prisma ./prisma
 COPY --from=builder /app/prisma.config.ts ./prisma.config.ts
-COPY --from=builder /app/node_modules/prisma ./node_modules/prisma
-COPY --from=builder /app/node_modules/@prisma ./node_modules/@prisma
-# prisma.config.ts imports dotenv at load time.
-COPY --from=builder /app/node_modules/dotenv ./node_modules/dotenv
+COPY --from=deps /app/node_modules ./node_modules
 
 COPY infra/entrypoint.sh ./entrypoint.sh
 RUN chmod +x ./entrypoint.sh
