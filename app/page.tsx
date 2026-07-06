@@ -13,7 +13,7 @@ export default async function HomePage() {
       <main className="flex flex-1 flex-col items-center justify-center gap-6 p-8 text-center">
         <h1 className="text-4xl font-bold">Your table rolls a lot of dice.</h1>
         <p className="max-w-md text-gray-600 dark:text-gray-400">
-          Rollwatch collects every roll from your Foundry game — the nat 20s, the clutch saves,
+          StatGoblin collects every roll from your Foundry game — the nat 20s, the clutch saves,
           the cursed luck. Sign in to start a campaign or join your table.
         </p>
         <div className="flex gap-3">

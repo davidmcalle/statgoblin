@@ -1,4 +1,4 @@
-# Rollwatch app image. Multi-stage: install → build → slim runtime.
+# StatGoblin app image. Multi-stage: install → build → slim runtime.
 # Build args let CI stamp the Clerk publishable key (public by design) into
 # the client bundle; the secret key arrives at runtime via the pod env.
 

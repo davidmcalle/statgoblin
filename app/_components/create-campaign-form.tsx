@@ -16,7 +16,7 @@ export function CreateCampaignForm() {
       <div className="rounded-lg border border-green-300 p-4 dark:border-green-800">
         <h2 className="mb-2 font-semibold">Campaign created 🎉</h2>
         <p className="mb-2 text-sm text-gray-600 dark:text-gray-400">
-          Copy these into Foundry (Configure Settings → Rollwatch). The API key is shown{" "}
+          Copy these into Foundry (Configure Settings → StatGoblin). The API key is shown{" "}
           <strong>only once</strong>.
         </p>
         <dl className="space-y-2 font-mono text-xs">

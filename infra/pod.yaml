@@ -5,11 +5,13 @@
 #
 # Replace the change-me values with real secrets before first start. The app
 # image auto-updates from GHCR via podman-auto-update (see the annotation);
-# migrations run automatically at container start.
+# migrations run automatically at container start. Caddy uses the stock image:
+# statgoblin.com gets its cert via the HTTP-01 challenge, so forward BOTH 80
+# and 443 to this VM.
 apiVersion: v1
 kind: Pod
 metadata:
-  name: rollwatch
+  name: statgoblin
   annotations:
     io.containers.autoupdate/app: registry
 spec:
@@ -17,40 +19,40 @@ spec:
     - name: postgres
       image: docker.io/library/postgres:16
       env:
-        - { name: POSTGRES_USER, value: rollwatch }
+        - { name: POSTGRES_USER, value: statgoblin }
         - { name: POSTGRES_PASSWORD, value: change-me }
-        - { name: POSTGRES_DB, value: rollwatch }
+        - { name: POSTGRES_DB, value: statgoblin }
       volumeMounts:
         - { name: pgdata, mountPath: /var/lib/postgresql/data }
 
     - name: app
-      image: ghcr.io/davidmcalle/rollwatch:latest
+      image: ghcr.io/davidmcalle/statgoblin:latest
       env:
         - name: DATABASE_URL
-          value: postgresql://rollwatch:change-me@localhost:5432/rollwatch?schema=public
+          value: postgresql://statgoblin:change-me@localhost:5432/statgoblin?schema=public
         - name: CLERK_SECRET_KEY
           value: change-me
         - name: NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY
           value: change-me
 
     - name: caddy
-      image: localhost/rollwatch-caddy:latest
+      image: docker.io/library/caddy:2
       ports:
+        - { containerPort: 80, hostPort: 80 }
         - { containerPort: 443, hostPort: 443 }
       env:
-        - { name: SITE_ADDRESS, value: rollwatch.darchbox.duckdns.org }
-        - { name: DUCKDNS_TOKEN, value: change-me }
+        - { name: SITE_ADDRESS, value: statgoblin.com }
       volumeMounts:
         - { name: caddyfile, mountPath: /etc/caddy/Caddyfile }
         - { name: caddy-data, mountPath: /data }
 
   volumes:
     - name: pgdata
-      persistentVolumeClaim: { claimName: rollwatch-pgdata }
+      persistentVolumeClaim: { claimName: statgoblin-pgdata }
     - name: caddy-data
-      persistentVolumeClaim: { claimName: rollwatch-caddy-data }
+      persistentVolumeClaim: { claimName: statgoblin-caddy-data }
     - name: caddyfile
       hostPath:
         # Absolute path to infra/Caddyfile on the VM.
-        path: /opt/rollwatch/infra/Caddyfile
+        path: /opt/statgoblin/infra/Caddyfile
         type: File

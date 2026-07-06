@@ -160,7 +160,7 @@ function makeEvent(at: Date): { payload: Record<string, unknown> } {
     const p = base(pcActor(pc), author, at);
     p.flags = {
       dnd5e: { messageType: "roll", roll: { skillId: skill, type: "skill" } },
-      rollwatch: { rolls: [{ parts: [{ source: `@abilities.${ability}.mod`, value: mod }] }], ability, profMultiplier: pick([0, 0, 1, 1, 2]) },
+      statgoblin: { rolls: [{ parts: [{ source: `@abilities.${ability}.mod`, value: mod }] }], ability, profMultiplier: pick([0, 0, 1, 1, 2]) },
     };
     p.rolls = [d20Roll(die, mod, "skill")];
     return { payload: p };
@@ -173,7 +173,7 @@ function makeEvent(at: Date): { payload: Record<string, unknown> } {
     const p = base(pcActor(pc), author, at);
     p.flags = {
       dnd5e: { messageType: "roll", roll: { ability, type: "save" } },
-      rollwatch: {
+      statgoblin: {
         ...(conc ? { rollType: "concentration" } : {}),
         rolls: [{ parts: [{ source: `@abilities.${ability}.mod`, value: 3 }] }],
         ability,

@@ -2,7 +2,7 @@
 // owns persistence. Bump PARSER_VERSION whenever classification or extraction
 // changes; reprocess rebuilds campaigns whose derive_state lags.
 
-export const PARSER_VERSION = 3;
+export const PARSER_VERSION = 4;
 
 type Term = {
   class?: string;
@@ -42,11 +42,24 @@ type Payload = {
   flags?: {
     core?: { initiativeRoll?: boolean };
     dnd5e?: { roll?: { type?: string; skillId?: string; ability?: string } };
-    rollwatch?: { rollType?: string; ability?: string; profMultiplier?: number };
+    statgoblin?: EnricherFlag;
+    rollwatch?: EnricherFlag;
+    whatwerolled?: EnricherFlag;
     "midi-qol"?: { isHit?: boolean; isCritical?: boolean; hitTargetUuids?: string[]; targets?: unknown[] };
   };
   rolls?: RollJson[];
 };
+
+type EnricherFlag = { rollType?: string; ability?: string; profMultiplier?: number };
+
+/**
+ * The module's enricher flag, across its renames: statgoblin (current) →
+ * rollwatch (interim) → whatwerolled (upstream). Old raw events keep their
+ * original namespace, so reprocessing must read all three.
+ */
+function enricherFlag(p: Payload): EnricherFlag | undefined {
+  return p.flags?.statgoblin ?? p.flags?.rollwatch ?? p.flags?.whatwerolled;
+}
 
 export type ParsedRoll = {
   rollIndex: number;
@@ -106,7 +119,7 @@ function actorTypeOf(p: Payload): string | null {
  * flag → dnd5e activity type → usage (item, no rolls) → manual.
  */
 function messageRollType(p: Payload, hasRolls: boolean): string {
-  const enriched = p.flags?.rollwatch?.rollType;
+  const enriched = enricherFlag(p)?.rollType;
   if (enriched) return enriched;
   if (p.flags?.core?.initiativeRoll) return "initiative";
   const dnd5e = p.flags?.dnd5e?.roll?.type;
@@ -168,11 +181,11 @@ export function parseRolls(payload: unknown, fallbackTime: Date): ParsedRoll[] {
     itemName: p.item?.name ?? null,
     itemType: p.item?.type ?? null,
     activityType: p.item?.activity?.type ?? null,
-    ability: p.flags?.rollwatch?.ability ?? p.flags?.dnd5e?.roll?.ability ?? null,
+    ability: enricherFlag(p)?.ability ?? p.flags?.dnd5e?.roll?.ability ?? null,
     skill: p.flags?.dnd5e?.roll && "skillId" in p.flags.dnd5e.roll
       ? (p.flags.dnd5e.roll.skillId ?? null)
       : null,
-    profMultiplier: p.flags?.rollwatch?.profMultiplier ?? null,
+    profMultiplier: enricherFlag(p)?.profMultiplier ?? null,
     rolledAt,
   };
 
@@ -204,7 +217,7 @@ export function parseRolls(payload: unknown, fallbackTime: Date): ParsedRoll[] {
 
   // The enricher's rollType (concentration/recharge) is resolved at roll time
   // and outranks the per-roll options.rollType (which says plain "save").
-  const enriched = p.flags?.rollwatch?.rollType;
+  const enriched = enricherFlag(p)?.rollType;
 
   return rolls.map((roll, rollIndex) => {
     const rollType = enriched ?? rollLevelType(roll, msgType);
