@@ -63,6 +63,9 @@ export function FilterBar({
     else params.set(key, value);
     // Changing kind invalidates a name picked from the other bucket's list.
     if (key === "kind") params.delete("actor");
+    // No-op guard: selects can fire on hydration; refetching the same URL
+    // remounts the route (and restarts loading states) for nothing.
+    if (params.toString() === searchParams.toString()) return;
     router.replace(`${pathname}?${params.toString()}`, { scroll: false });
   };
 

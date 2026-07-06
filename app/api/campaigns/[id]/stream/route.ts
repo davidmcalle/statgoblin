@@ -17,11 +17,24 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   const encoder = new TextEncoder();
   const stream = new ReadableStream({
     start(controller) {
-      const send = () => controller.enqueue(encoder.encode("data: roll\n\n"));
-      const unsubscribe = subscribeCampaign(id, send);
+      let closed = false;
+      // Enqueueing after the client vanishes throws on the dead controller
+      // (dev logs it as "transformAlgorithm is not a function") — treat any
+      // enqueue failure as a disconnect and tear down.
+      const write = (chunk: string) => {
+        if (closed) return;
+        try {
+          controller.enqueue(encoder.encode(chunk));
+        } catch {
+          cleanup();
+        }
+      };
+      const unsubscribe = subscribeCampaign(id, () => write("data: roll\n\n"));
       // Comment-frame heartbeat keeps proxies from idling the connection out.
-      const heartbeat = setInterval(() => controller.enqueue(encoder.encode(": ping\n\n")), 25_000);
-      request.signal.addEventListener("abort", () => {
+      const heartbeat = setInterval(() => write(": ping\n\n"), 25_000);
+      const cleanup = () => {
+        if (closed) return;
+        closed = true;
         clearInterval(heartbeat);
         unsubscribe();
         try {
@@ -29,7 +42,8 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
         } catch {
           // already closed
         }
-      });
+      };
+      request.signal.addEventListener("abort", cleanup);
     },
   });
 
@@ -38,6 +52,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
       "Content-Type": "text/event-stream",
       "Cache-Control": "no-cache, no-transform",
       Connection: "keep-alive",
+      "X-Accel-Buffering": "no",
     },
   });
 }

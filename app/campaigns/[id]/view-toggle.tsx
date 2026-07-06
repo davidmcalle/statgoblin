@@ -13,6 +13,7 @@ export function ViewToggle({ view }: { view: "log" | "charts" }) {
     const params = new URLSearchParams(searchParams);
     if (v === "charts") params.delete("view");
     else params.set("view", v);
+    if (params.toString() === searchParams.toString()) return;
     router.replace(`${pathname}?${params.toString()}`, { scroll: false });
   };
 
