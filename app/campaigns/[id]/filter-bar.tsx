@@ -20,7 +20,8 @@ const TIMEFRAMES = [
 const ALL = "__all__";
 
 // URL-param driven filters: the server page re-queries on navigation, so
-// every panel below reflects the selection.
+// every panel below reflects the selection. Base UI's Select renders labels
+// from the `items` map passed to the root.
 export function FilterBar({
   actors,
   types,
@@ -43,45 +44,64 @@ export function FilterBar({
 
   const hasFilters = !!(current.actor || current.type || current.days);
 
+  const actorItems = [
+    { value: ALL, label: "All characters" },
+    ...actors.map((a) => ({ value: a, label: a })),
+  ];
+  const typeItems = [
+    { value: ALL, label: "All roll types" },
+    ...types.map((t) => ({ value: t, label: t })),
+  ];
+  const timeItems = [{ value: ALL, label: "All time" }, ...TIMEFRAMES];
+
   return (
     <div className="flex flex-wrap items-center gap-2">
-      <Select value={current.actor ?? ALL} onValueChange={(v) => setParam("actor", v ?? ALL)}>
+      <Select
+        items={actorItems}
+        value={current.actor ?? ALL}
+        onValueChange={(v) => setParam("actor", v ?? ALL)}
+      >
         <SelectTrigger className="w-44">
-          <SelectValue placeholder="Character" />
+          <SelectValue />
         </SelectTrigger>
         <SelectContent>
-          <SelectItem value={ALL}>All characters</SelectItem>
-          {actors.map((a) => (
-            <SelectItem key={a} value={a}>
-              {a}
+          {actorItems.map((i) => (
+            <SelectItem key={i.value} value={i.value}>
+              {i.label}
             </SelectItem>
           ))}
         </SelectContent>
       </Select>
 
-      <Select value={current.type ?? ALL} onValueChange={(v) => setParam("type", v ?? ALL)}>
+      <Select
+        items={typeItems}
+        value={current.type ?? ALL}
+        onValueChange={(v) => setParam("type", v ?? ALL)}
+      >
         <SelectTrigger className="w-40">
-          <SelectValue placeholder="Roll type" />
+          <SelectValue />
         </SelectTrigger>
         <SelectContent>
-          <SelectItem value={ALL}>All roll types</SelectItem>
-          {types.map((t) => (
-            <SelectItem key={t} value={t}>
-              {t}
+          {typeItems.map((i) => (
+            <SelectItem key={i.value} value={i.value}>
+              {i.label}
             </SelectItem>
           ))}
         </SelectContent>
       </Select>
 
-      <Select value={current.days ?? ALL} onValueChange={(v) => setParam("days", v ?? ALL)}>
+      <Select
+        items={timeItems}
+        value={current.days ?? ALL}
+        onValueChange={(v) => setParam("days", v ?? ALL)}
+      >
         <SelectTrigger className="w-40">
-          <SelectValue placeholder="Timeframe" />
+          <SelectValue />
         </SelectTrigger>
         <SelectContent>
-          <SelectItem value={ALL}>All time</SelectItem>
-          {TIMEFRAMES.map((t) => (
-            <SelectItem key={t.value} value={t.value}>
-              {t.label}
+          {timeItems.map((i) => (
+            <SelectItem key={i.value} value={i.value}>
+              {i.label}
             </SelectItem>
           ))}
         </SelectContent>
