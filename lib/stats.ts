@@ -225,13 +225,21 @@ export async function rollTypeCounts(
   campaignId: string,
   f: StatFilters = {},
 ): Promise<RollTypeCount[]> {
-  const rows = await prisma.roll.groupBy({
-    by: ["rollType"],
-    where: whereFilters(campaignId, f),
-    _count: { _all: true },
-  });
+  // "usage" alone hides what was used — split class/racial features (dnd5e
+  // "feat" items, e.g. Spider Climb) from item/spell/weapon uses, matching
+  // the roll log's category names.
+  const rows = await prisma.$queryRaw<{ roll_type: string; count: bigint }[]>`
+    SELECT CASE
+             WHEN roll_type = 'usage' AND item_type = 'feat' THEN 'feature'
+             WHEN roll_type = 'usage' THEN 'item'
+             ELSE roll_type
+           END      AS roll_type,
+           COUNT(*) AS count
+    FROM rolls
+    WHERE ${sqlFilters(campaignId, f)}
+    GROUP BY 1`;
   return rows
-    .map((r) => ({ rollType: r.rollType, count: r._count._all }))
+    .map((r) => ({ rollType: r.roll_type, count: Number(r.count) }))
     .sort((a, b) => b.count - a.count);
 }
 
