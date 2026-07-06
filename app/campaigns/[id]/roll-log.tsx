@@ -108,17 +108,21 @@ function Die({ die }: { die: { f: number; r: number } }) {
   return (
     <span
       title={`d${die.f}: ${die.r}`}
-      className="relative inline-flex h-8 w-8 items-center justify-center"
+      className="relative inline-flex h-9 w-9 items-center justify-center"
     >
+      {/* Wider hex so two digits sit inside the shape. */}
       <svg viewBox="0 0 24 24" className="absolute inset-0 h-full w-full" aria-hidden>
         <path
-          d="M12 1.5 L21.5 7 L21.5 17 L12 22.5 L2.5 17 L2.5 7 Z"
+          d="M12 0.5 L22.5 6.2 L22.5 17.8 L12 23.5 L1.5 17.8 L1.5 6.2 Z"
           fill={color}
           stroke="var(--border)"
-          strokeWidth="1"
+          strokeWidth="0.8"
         />
       </svg>
-      <span className="relative text-xs font-bold" style={{ color: text }}>
+      <span
+        className={`relative font-bold leading-none ${die.r >= 10 ? "text-[10px]" : "text-xs"}`}
+        style={{ color: text }}
+      >
         {die.r}
       </span>
     </span>
