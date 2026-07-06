@@ -5,34 +5,40 @@ import { D20Icon } from "./d20-icon";
 
 const BOXES = 4;
 const STEP_MS = 650;
+// Pre-played results — the same four rolls every time, dealt in a random
+// order per run. No mid-flight randomness to fight re-renders.
+const VALUES = [1, 8, 15, 20];
 
-// Loading animation: a d20 bounces across a row of "?" boxes, revealing a
-// fresh roll in each as it lands — red for low, green for high.
+function shuffled(): number[] {
+  const v = [...VALUES];
+  for (let i = v.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [v[i], v[j]] = [v[j], v[i]];
+  }
+  return v;
+}
+
+// Loading animation: a d20 bounces across a row of "?" boxes, revealing the
+// pre-played roll in each as it lands — red for low, green for high.
 export function LoadingDice({ label = "Rolling…" }: { label?: string }) {
   const [pos, setPos] = useState(-1);
-  const [revealed, setRevealed] = useState<(number | null)[]>(Array(BOXES).fill(null));
+  const [values, setValues] = useState<number[]>(shuffled);
 
   useEffect(() => {
     const timer = setInterval(() => {
       setPos((p) => {
         const next = p + 1;
         if (next >= BOXES + 2) {
-          // Hold at the end for a beat, then start a fresh run.
-          setRevealed(Array(BOXES).fill(null));
+          // Hold at the end for a beat, then deal a fresh order.
+          setValues(shuffled());
           return -1;
-        }
-        if (next >= 0 && next < BOXES) {
-          setRevealed((r) => {
-            const copy = [...r];
-            copy[next] = 1 + Math.floor(Math.random() * 20);
-            return copy;
-          });
         }
         return next;
       });
     }, STEP_MS);
     return () => clearInterval(timer);
   }, []);
+  const revealed = values.map((v, i) => (pos >= i ? v : null));
 
   const colorFor = (v: number) => `hsl(${((v - 1) / 19) * 120}, 65%, 45%)`;
   const diceLeft = Math.min(Math.max(pos, 0), BOXES - 1);
