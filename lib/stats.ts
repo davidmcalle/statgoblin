@@ -469,6 +469,7 @@ export type RollLogRow = {
   actorName: string | null;
   authorName: string | null;
   itemName: string | null;
+  itemType: string | null;
   skill: string | null;
   ability: string | null;
   damageType: string | null;
@@ -498,6 +499,7 @@ export async function rollLog(
       actorName: true,
       authorName: true,
       itemName: true,
+      itemType: true,
       skill: true,
       ability: true,
       damageType: true,

@@ -100,27 +100,82 @@ function describe(r: RollLogRow): string {
 
 const DICE_CAP = 6;
 
+// Roll category drives the row accent — check vs save vs attack vs damage vs
+// heal vs feature vs item, per the log design.
+type Category = "check" | "save" | "attack" | "damage" | "healing" | "feature" | "item" | "other";
+
+const CATEGORY_COLORS: Record<Category, string> = {
+  check: "#8b7fe8", // violet
+  save: "#3fa284", // teal-green
+  attack: "#3b82d9", // blue
+  damage: "#e05d38", // ember
+  healing: "#d95d8a", // rose
+  feature: "#d99a2b", // amber
+  item: "#5bb8c4", // cyan
+  other: "#6b7280", // gray
+};
+
+function categoryOf(r: RollLogRow): Category {
+  switch (r.rollType) {
+    case "skill":
+    case "ability":
+    case "tool":
+    case "initiative":
+      return "check";
+    case "save":
+    case "concentration":
+    case "death":
+      return "save";
+    case "attack":
+      return "attack";
+    case "damage":
+      return "damage";
+    case "healing":
+    case "hitDie":
+      return "healing";
+    case "usage":
+    case "recharge":
+      // Class/racial features are dnd5e "feat" items; everything else used
+      // from the sheet (consumables, weapons, wondrous items) is an item.
+      return r.itemType === "feat" ? "feature" : "item";
+    default:
+      return "other";
+  }
+}
+
+// One SVG outline per physical die: d4 triangle, d6 square, d8 diamond,
+// d10 kite, d12 pentagon, d20 hexagon, anything else a circle.
+const DIE_PATHS: Record<number, string> = {
+  4: "M12 2 L22.5 21 L1.5 21 Z",
+  6: "M4 4 h16 v16 h-16 Z",
+  8: "M12 1 L22.5 12 L12 23 L1.5 12 Z",
+  10: "M12 1 L22 9.5 L12 23 L2 9.5 Z",
+  12: "M12 1 L22.8 8.8 L18.7 21.5 L5.3 21.5 L1.2 8.8 Z",
+  20: "M12 0.5 L22.5 6.2 L22.5 17.8 L12 23.5 L1.5 17.8 L1.5 6.2 Z",
+};
+
 function Die({ die }: { die: { f: number; r: number } }) {
   const nat20 = die.f === 20 && die.r === 20;
   const nat1 = die.f === 20 && die.r === 1;
-  const color = nat20 ? "#22c55e" : nat1 ? "#ef4444" : "var(--muted)";
+  const fill = nat20 ? "#22c55e" : nat1 ? "#ef4444" : "var(--muted)";
   const text = nat20 || nat1 ? "white" : "var(--foreground)";
+  const path = DIE_PATHS[die.f];
+  // d4 numbers sit low inside the triangle.
+  const nudge = die.f === 4 ? "translate-y-[4px]" : "";
   return (
     <span
       title={`d${die.f}: ${die.r}`}
       className="relative inline-flex h-9 w-9 items-center justify-center"
     >
-      {/* Wider hex so two digits sit inside the shape. */}
       <svg viewBox="0 0 24 24" className="absolute inset-0 h-full w-full" aria-hidden>
-        <path
-          d="M12 0.5 L22.5 6.2 L22.5 17.8 L12 23.5 L1.5 17.8 L1.5 6.2 Z"
-          fill={color}
-          stroke="var(--border)"
-          strokeWidth="0.8"
-        />
+        {path ? (
+          <path d={path} fill={fill} stroke="var(--border)" strokeWidth="0.8" strokeLinejoin="round" />
+        ) : (
+          <circle cx="12" cy="12" r="10.5" fill={fill} stroke="var(--border)" strokeWidth="0.8" />
+        )}
       </svg>
       <span
-        className={`relative font-bold leading-none ${die.r >= 10 ? "text-[10px]" : "text-xs"}`}
+        className={`relative font-bold leading-none ${die.r >= 10 ? "text-[10px]" : "text-xs"} ${nudge}`}
         style={{ color: text }}
       >
         {die.r}
@@ -173,14 +228,16 @@ export function RollLog({
               const Icon = (r.rollType === "skill" && r.skill && SKILL_ICONS[r.skill]) ||
                 TYPE_ICONS[r.rollType] ||
                 Dices;
-              const color = (r.actorName && colors.get(r.actorName)) || "var(--border)";
+              const category = categoryOf(r);
+              const accent = CATEGORY_COLORS[category];
+              const avatarColor = (r.actorName && colors.get(r.actorName)) || "var(--border)";
               const shown = r.dice.slice(0, DICE_CAP);
               const hidden = r.dice.length - shown.length;
               return (
                 <li
                   key={r.id}
                   className="flex items-center gap-4 rounded-lg border bg-card p-4"
-                  style={{ borderLeft: `3px solid ${color}` }}
+                  style={{ borderLeft: `3px solid ${accent}` }}
                 >
                   {r.actorName && images.get(r.actorName) ? (
                     // eslint-disable-next-line @next/next/no-img-element
@@ -192,7 +249,7 @@ export function RollLog({
                   ) : (
                     <span
                       className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full font-bold text-white"
-                      style={{ background: color }}
+                      style={{ background: avatarColor }}
                     >
                       {(r.actorName ?? "?").slice(0, 1)}
                     </span>
@@ -205,7 +262,7 @@ export function RollLog({
                       )}
                     </div>
                     <div className="mt-1 flex items-center gap-1.5 text-sm text-muted-foreground">
-                      <Icon size={15} aria-hidden />
+                      <Icon size={15} aria-hidden style={{ color: accent }} />
                       <span>{describe(r)}</span>
                     </div>
                   </div>
