@@ -1,65 +1,81 @@
-import Image from "next/image";
+import { auth } from "@clerk/nextjs/server";
+import { SignInButton, SignUpButton } from "@clerk/nextjs";
+import Link from "next/link";
+import { prisma } from "@/lib/db/prisma";
+import { CreateCampaignForm } from "./_components/create-campaign-form";
+import { JoinCampaignForm } from "./_components/join-campaign-form";
 
-export default function Home() {
-  return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
-        </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
+export default async function HomePage() {
+  const { userId } = await auth();
+
+  if (!userId) {
+    return (
+      <main className="flex flex-1 flex-col items-center justify-center gap-6 p-8 text-center">
+        <h1 className="text-4xl font-bold">Your table rolls a lot of dice.</h1>
+        <p className="max-w-md text-gray-600 dark:text-gray-400">
+          Rollwatch collects every roll from your Foundry game — the nat 20s, the clutch saves,
+          the cursed luck. Sign in to start a campaign or join your table.
+        </p>
+        <div className="flex gap-3">
+          <SignInButton>
+            <button className="rounded-md bg-gray-900 px-4 py-2 text-white dark:bg-white dark:text-gray-900">
+              Sign in
+            </button>
+          </SignInButton>
+          <SignUpButton>
+            <button className="rounded-md border border-gray-300 px-4 py-2 dark:border-gray-700">
+              Sign up
+            </button>
+          </SignUpButton>
         </div>
       </main>
-    </div>
+    );
+  }
+
+  const memberships = await prisma.campaignMember.findMany({
+    where: { userId },
+    include: { campaign: { include: { _count: { select: { events: true, members: true } } } } },
+    orderBy: { joinedAt: "desc" },
+  });
+
+  return (
+    <main className="mx-auto w-full max-w-3xl flex-1 p-6">
+      <h1 className="mb-6 text-2xl font-bold">Your campaigns</h1>
+      {memberships.length === 0 && (
+        <p className="mb-6 text-gray-600 dark:text-gray-400">
+          No campaigns yet — create one, or join with an invite code.
+        </p>
+      )}
+      <ul className="mb-8 space-y-3">
+        {memberships.map(({ campaign, role }) => (
+          <li key={campaign.id}>
+            <Link
+              href={`/campaigns/${campaign.id}`}
+              className="flex items-center gap-4 rounded-lg border border-gray-200 p-4 hover:bg-gray-50 dark:border-gray-800 dark:hover:bg-gray-900"
+            >
+              {campaign.image ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={campaign.image} alt="" className="h-12 w-12 rounded object-cover" />
+              ) : (
+                <span className="flex h-12 w-12 items-center justify-center rounded bg-gray-100 text-2xl dark:bg-gray-800">
+                  🎲
+                </span>
+              )}
+              <span className="flex-1">
+                <span className="block font-semibold">{campaign.name}</span>
+                <span className="text-sm text-gray-500">
+                  {role === "gm" ? "GM" : "Player"} · {campaign._count.members} members ·{" "}
+                  {campaign._count.events} rolls
+                </span>
+              </span>
+            </Link>
+          </li>
+        ))}
+      </ul>
+      <div className="grid gap-6 sm:grid-cols-2">
+        <CreateCampaignForm />
+        <JoinCampaignForm />
+      </div>
+    </main>
   );
 }
