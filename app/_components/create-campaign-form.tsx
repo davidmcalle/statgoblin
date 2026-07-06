@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { createCampaign } from "@/app/actions/campaigns";
+import { CopyButton } from "./copy-button";
 
 // After creation the admin API key is shown exactly once — it's never stored
 // in plaintext, so the GM must copy it into Foundry now (or regenerate later).
@@ -21,14 +22,16 @@ export function CreateCampaignForm() {
         <dl className="space-y-2 font-mono text-xs">
           <div>
             <dt className="font-sans font-semibold">Campaign ID</dt>
-            <dd className="break-all rounded bg-gray-100 p-2 dark:bg-gray-900">
-              {created.campaignId}
+            <dd className="flex items-start gap-2 rounded bg-gray-100 p-2 dark:bg-gray-900">
+              <span className="break-all">{created.campaignId}</span>
+              <CopyButton value={created.campaignId} label="Copy campaign ID" />
             </dd>
           </div>
           <div>
             <dt className="font-sans font-semibold">Admin API Key</dt>
-            <dd className="break-all rounded bg-gray-100 p-2 dark:bg-gray-900">
-              {created.ingestKey}
+            <dd className="flex items-start gap-2 rounded bg-gray-100 p-2 dark:bg-gray-900">
+              <span className="break-all">{created.ingestKey}</span>
+              <CopyButton value={created.ingestKey} label="Copy API key" />
             </dd>
           </div>
         </dl>

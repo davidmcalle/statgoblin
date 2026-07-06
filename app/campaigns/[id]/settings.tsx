@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { createApiKey, deleteApiKey, updateCampaign } from "@/app/actions/campaigns";
+import { CopyButton } from "@/app/_components/copy-button";
 
 type Campaign = { id: string; name: string; image: string; inviteCode: string };
 
@@ -75,14 +76,16 @@ export function CampaignSettings({
       <div className="mt-6 space-y-4 text-sm">
         <div>
           <span className="font-semibold">Invite link</span>
-          <p className="break-all rounded bg-gray-100 p-2 font-mono text-xs dark:bg-gray-900">
-            {inviteLink || `/join/${campaign.inviteCode}`}
+          <p className="flex items-start gap-2 rounded bg-gray-100 p-2 font-mono text-xs dark:bg-gray-900">
+            <span className="break-all">{inviteLink || `/join/${campaign.inviteCode}`}</span>
+            <CopyButton value={inviteLink || `/join/${campaign.inviteCode}`} label="Copy invite link" />
           </p>
         </div>
         <div>
           <span className="font-semibold">Foundry: Campaign ID</span>
-          <p className="break-all rounded bg-gray-100 p-2 font-mono text-xs dark:bg-gray-900">
-            {campaign.id}
+          <p className="flex items-start gap-2 rounded bg-gray-100 p-2 font-mono text-xs dark:bg-gray-900">
+            <span className="break-all">{campaign.id}</span>
+            <CopyButton value={campaign.id} label="Copy campaign ID" />
           </p>
         </div>
 
@@ -94,8 +97,9 @@ export function CampaignSettings({
           {freshKey && (
             <div className="mb-3 rounded border border-green-300 p-2 dark:border-green-800">
               <p className="mb-1 font-semibold">New key — copy it now, it won&apos;t be shown again:</p>
-              <p className="break-all rounded bg-gray-100 p-2 font-mono text-xs dark:bg-gray-900">
-                {freshKey}
+              <p className="flex items-start gap-2 rounded bg-gray-100 p-2 font-mono text-xs dark:bg-gray-900">
+                <span className="break-all">{freshKey}</span>
+                <CopyButton value={freshKey} label="Copy API key" />
               </p>
             </div>
           )}
