@@ -14,13 +14,23 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
   });
   if (!member) return new Response("not a member", { status: 403 });
 
-  const latest = await prisma.rawEvent.aggregate({
-    where: { campaignId: id },
-    _max: { updatedAt: true },
-    _count: true,
-  });
+  // Version = newest of (a) event activity — ingest and roll deletions both
+  // bump raw_events.updated_at — and (b) the campaign's activity stamp, which
+  // shared mutations (assign/kind/settings/joins) publish through.
+  const [latest, campaign] = await Promise.all([
+    prisma.rawEvent.aggregate({
+      where: { campaignId: id },
+      _max: { updatedAt: true },
+      _count: true,
+    }),
+    prisma.campaign.findUnique({ where: { id }, select: { activityAt: true } }),
+  ]);
+  const newest = Math.max(
+    latest._max.updatedAt?.getTime() ?? 0,
+    campaign?.activityAt.getTime() ?? 0,
+  );
   return Response.json(
-    { t: latest._max.updatedAt?.toISOString() ?? null, n: latest._count },
+    { t: newest ? new Date(newest).toISOString() : null, n: latest._count },
     { headers: { "Cache-Control": "no-store" } },
   );
 }

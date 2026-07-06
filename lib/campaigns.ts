@@ -42,3 +42,15 @@ export async function requireMember(campaignId: string, userId: string) {
   if (!member) throw new Error("Not a member of this campaign");
   return member;
 }
+
+/**
+ * Publish a shared mutation: bump the campaign's activity stamp so every
+ * member's freshness poll (LiveRefresh → /latest) sees a new version and
+ * re-renders. Call from any action whose effect other members should see.
+ */
+export async function touchCampaign(campaignId: string): Promise<void> {
+  await prisma.campaign.update({
+    where: { id: campaignId },
+    data: { activityAt: new Date() },
+  });
+}

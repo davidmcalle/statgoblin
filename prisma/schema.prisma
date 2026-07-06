@@ -28,6 +28,10 @@ model Campaign {
   hideDeathSaves      Boolean   @default(false) @map("hide_death_saves")
   hideDeathSavesSince DateTime? @map("hide_death_saves_since") @db.Timestamptz(6)
   createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  // Shared-mutation version stamp: bumped by any change other members should
+  // see (assignments, kind tags, deletions, settings). The freshness probe
+  // folds this in, so every client's poll picks the change up.
+  activityAt DateTime @default(now()) @map("activity_at") @db.Timestamptz(6)
 
   members CampaignMember[]
   events  RawEvent[]

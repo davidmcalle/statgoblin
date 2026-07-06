@@ -1,0 +1,2 @@
+-- AlterTable
+ALTER TABLE "campaigns" ADD COLUMN     "activity_at" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP;
