@@ -17,12 +17,14 @@ export function ViewToggle({ view }: { view: "log" | "charts" }) {
     router.replace(`${pathname}?${params.toString()}`, { scroll: false });
   };
 
-  const base = "flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm transition-colors";
+  const base =
+    "flex items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-sm transition-colors";
   const active = "bg-background font-semibold shadow-sm";
   const idle = "text-muted-foreground hover:text-foreground";
 
   return (
-    <div className="inline-flex rounded-lg border bg-muted p-1">
+    // Full-width halves on phones; compact inline pill on desktop.
+    <div className="grid w-full grid-cols-2 rounded-lg border bg-muted p-1 sm:inline-flex sm:w-auto">
       <button className={`${base} ${view === "charts" ? active : idle}`} onClick={() => set("charts")}>
         <ChartColumn size={15} /> Charts
       </button>

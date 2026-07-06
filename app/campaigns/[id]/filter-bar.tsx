@@ -1,6 +1,8 @@
 "use client";
 
+import { useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { ListFilter } from "lucide-react";
 import {
   Select,
   SelectContent,
@@ -56,6 +58,8 @@ export function FilterBar({
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
+  // Mobile: filters live behind a toggle so the bar doesn't swallow the page.
+  const [open, setOpen] = useState(false);
 
   const setParam = (key: string, value: string) => {
     const params = new URLSearchParams(searchParams);
@@ -105,15 +109,36 @@ export function FilterBar({
   ];
   const timeItems = [{ value: ALL, label: "All time" }, ...TIMEFRAMES];
 
+  const activeCount = [
+    current.actor,
+    current.type,
+    current.days,
+    current.kind,
+    current.session,
+  ].filter(Boolean).length;
+
   return (
-    <div className="flex flex-wrap items-center gap-2">
+    <div className="w-full sm:w-auto">
+      <Button
+        variant="outline"
+        size="sm"
+        className="sm:hidden"
+        onClick={() => setOpen((o) => !o)}
+      >
+        <ListFilter size={15} />
+        Filters
+        {activeCount > 0 && ` (${activeCount})`}
+      </Button>
+      <div
+        className={`${open ? "grid" : "hidden"} mt-2 grid-cols-2 gap-2 sm:mt-0 sm:flex sm:flex-wrap sm:items-center`}
+      >
       {showPcSelect && (
         <Select
           items={pcItems}
           value={pcActors.includes(current.actor ?? "") ? current.actor! : ALL}
           onValueChange={(v) => setParam("actor", v ?? ALL)}
         >
-          <SelectTrigger className="w-44">
+          <SelectTrigger className="w-full sm:w-44">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -132,7 +157,7 @@ export function FilterBar({
           value={monsterActors.includes(current.actor ?? "") ? current.actor! : ALL}
           onValueChange={(v) => setParam("actor", v ?? ALL)}
         >
-          <SelectTrigger className="w-48">
+          <SelectTrigger className="w-full sm:w-48">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -150,7 +175,7 @@ export function FilterBar({
         value={current.kind ?? ALL}
         onValueChange={(v) => setParam("kind", v ?? ALL)}
       >
-        <SelectTrigger className="w-44">
+        <SelectTrigger className="w-full sm:w-44">
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
@@ -167,7 +192,7 @@ export function FilterBar({
         value={current.type ?? ALL}
         onValueChange={(v) => setParam("type", v ?? ALL)}
       >
-        <SelectTrigger className="w-40">
+        <SelectTrigger className="w-full sm:w-40">
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
@@ -184,7 +209,7 @@ export function FilterBar({
         value={current.days ?? ALL}
         onValueChange={(v) => setParam("days", v ?? ALL)}
       >
-        <SelectTrigger className="w-40">
+        <SelectTrigger className="w-full sm:w-40">
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
@@ -201,7 +226,7 @@ export function FilterBar({
         value={current.session ?? ALL}
         onValueChange={(v) => setParam("session", v ?? ALL)}
       >
-        <SelectTrigger className="w-44">
+        <SelectTrigger className="w-full sm:w-44">
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
@@ -218,7 +243,7 @@ export function FilterBar({
         value={current.by === "player" ? "player" : "character"}
         onValueChange={(v) => setParam("by", v === "player" ? "player" : ALL)}
       >
-        <SelectTrigger className="w-36">
+        <SelectTrigger className="w-full sm:w-36">
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
@@ -231,10 +256,16 @@ export function FilterBar({
       </Select>
 
       {hasFilters && (
-        <Button variant="ghost" size="sm" onClick={() => router.replace(pathname, { scroll: false })}>
+        <Button
+          variant="ghost"
+          size="sm"
+          className="col-span-2 sm:col-span-1"
+          onClick={() => router.replace(pathname, { scroll: false })}
+        >
           Clear
         </Button>
       )}
+      </div>
     </div>
   );
 }

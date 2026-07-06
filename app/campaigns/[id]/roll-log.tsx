@@ -240,77 +240,93 @@ export function RollLog({
               const avatarColor = (r.actorName && colors.get(r.actorName)) || "var(--border)";
               const shown = r.dice.slice(0, DICE_CAP);
               const hidden = r.dice.length - shown.length;
+              const time = r.rolledAt.toLocaleTimeString("en-GB", {
+                hour: "2-digit",
+                minute: "2-digit",
+              });
+              const diceStrip = (
+                <>
+                  {shown.map((die, i) => (
+                    <Die key={i} die={die} />
+                  ))}
+                  {hidden > 0 && (
+                    <span className="text-xs text-muted-foreground">+{hidden}</span>
+                  )}
+                  {r.modifier != null && r.modifier !== 0 && (
+                    <span className="ml-1 text-sm font-semibold text-muted-foreground">
+                      {r.modifier > 0 ? `+${r.modifier}` : r.modifier}
+                    </span>
+                  )}
+                </>
+              );
               return (
                 <li
                   key={r.id}
-                  className="flex items-center gap-4 rounded-lg border bg-card p-4"
+                  className="rounded-lg border bg-card p-3 sm:p-4"
                   style={{ borderLeft: `3px solid ${accent}` }}
                 >
-                  {r.actorName && images.get(r.actorName) ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img
-                      src={images.get(r.actorName)}
-                      alt=""
-                      className="h-11 w-11 shrink-0 rounded-full object-cover"
-                    />
-                  ) : (
-                    <span
-                      className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full font-bold text-white"
-                      style={{ background: avatarColor }}
-                    >
-                      {(r.actorName ?? "?").slice(0, 1)}
-                    </span>
-                  )}
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-baseline gap-2">
-                      <span className="truncate font-semibold">{r.actorName ?? "—"}</span>
-                      {r.authorName && (
-                        <span className="text-xs text-muted-foreground">{r.authorName}</span>
-                      )}
+                  <div className="flex items-center gap-3 sm:gap-4">
+                    {r.actorName && images.get(r.actorName) ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={images.get(r.actorName)}
+                        alt=""
+                        className="h-10 w-10 shrink-0 rounded-full object-cover sm:h-11 sm:w-11"
+                      />
+                    ) : (
+                      <span
+                        className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full font-bold text-white sm:h-11 sm:w-11"
+                        style={{ background: avatarColor }}
+                      >
+                        {(r.actorName ?? "?").slice(0, 1)}
+                      </span>
+                    )}
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-baseline gap-2">
+                        <span className="truncate font-semibold">{r.actorName ?? "—"}</span>
+                        {r.authorName && (
+                          <span className="hidden text-xs text-muted-foreground sm:inline">
+                            {r.authorName}
+                          </span>
+                        )}
+                      </div>
+                      <div className="mt-1 flex items-center gap-1.5 text-sm text-muted-foreground">
+                        <Icon size={15} className="shrink-0" aria-hidden style={{ color: accent }} />
+                        <span className="truncate">{describe(r)}</span>
+                        {r.isHidden && (
+                          <span className="ml-1 inline-flex shrink-0 items-center gap-1 rounded bg-muted px-1.5 py-0.5 text-[10px] font-semibold">
+                            <EyeOff size={11} /> hidden from players
+                          </span>
+                        )}
+                      </div>
                     </div>
-                    <div className="mt-1 flex items-center gap-1.5 text-sm text-muted-foreground">
-                      <Icon size={15} aria-hidden style={{ color: accent }} />
-                      <span>{describe(r)}</span>
-                      {r.isHidden && (
-                        <span className="ml-1 inline-flex items-center gap-1 rounded bg-muted px-1.5 py-0.5 text-[10px] font-semibold">
-                          <EyeOff size={11} /> hidden from players
+                    {/* Dice inline on desktop; on phones they drop to the second line. */}
+                    <div className="hidden items-center gap-1.5 sm:flex">{diceStrip}</div>
+                    <div className="shrink-0 text-right sm:w-16">
+                      <div
+                        className={`text-xl font-bold sm:text-2xl ${
+                          r.isNat20 ? "text-green-500" : r.isNat1 ? "text-red-500" : ""
+                        }`}
+                      >
+                        {r.total ?? ""}
+                      </div>
+                      {r.dc != null && (
+                        <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] font-semibold text-muted-foreground">
+                          DC {r.dc}
                         </span>
                       )}
                     </div>
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    {shown.map((die, i) => (
-                      <Die key={i} die={die} />
-                    ))}
-                    {hidden > 0 && (
-                      <span className="text-xs text-muted-foreground">+{hidden}</span>
-                    )}
-                    {r.modifier != null && r.modifier !== 0 && (
-                      <span className="ml-1 text-sm font-semibold text-muted-foreground">
-                        {r.modifier > 0 ? `+${r.modifier}` : r.modifier}
-                      </span>
-                    )}
-                  </div>
-                  <div className="w-16 text-right">
-                    <div
-                      className={`text-2xl font-bold ${
-                        r.isNat20 ? "text-green-500" : r.isNat1 ? "text-red-500" : ""
-                      }`}
-                    >
-                      {r.total ?? ""}
+                    <div className="hidden w-12 text-right text-xs text-muted-foreground sm:block">
+                      {time}
                     </div>
-                    {r.dc != null && (
-                      <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] font-semibold text-muted-foreground">
-                        DC {r.dc}
-                      </span>
+                    {(isCreator || (r.actorFid && owned.has(r.actorFid))) && (
+                      <DeleteRollButton rollId={r.id} />
                     )}
                   </div>
-                  <div className="w-12 text-right text-xs text-muted-foreground">
-                    {r.rolledAt.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}
+                  <div className="mt-2 flex items-center gap-1.5 pl-[52px] sm:hidden">
+                    {diceStrip}
+                    <span className="ml-auto shrink-0 text-xs text-muted-foreground">{time}</span>
                   </div>
-                  {(isCreator || (r.actorFid && owned.has(r.actorFid))) && (
-                    <DeleteRollButton rollId={r.id} />
-                  )}
                 </li>
               );
             })}

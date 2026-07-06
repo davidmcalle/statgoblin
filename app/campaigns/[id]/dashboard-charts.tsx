@@ -20,6 +20,7 @@ import {
   ChartTooltipContent,
   type ChartConfig,
 } from "@/components/ui/chart";
+import { useIsMobile } from "@/lib/use-mobile";
 
 // All recharts panels, shadcn-wrapped. Data arrives shaped + colored from the
 // server page; components stay purely presentational.
@@ -33,6 +34,7 @@ export function SkillBarsCard({
   data: NamedCount[];
   legend: { label: string; color: string }[];
 }) {
+  const isMobile = useIsMobile();
   if (data.length === 0) return null;
   const config = { count: { label: "Rolls" } } satisfies ChartConfig;
   return (
@@ -49,7 +51,8 @@ export function SkillBarsCard({
             <YAxis
               type="category"
               dataKey="name"
-              width={130}
+              width={isMobile ? 92 : 130}
+              fontSize={isMobile ? 11 : 12}
               tickLine={false}
               axisLine={false}
             />
@@ -75,6 +78,7 @@ export function SkillBarsCard({
 }
 
 export function RollTypesCard({ data }: { data: NamedCount[] }) {
+  const isMobile = useIsMobile();
   if (data.length === 0) return null;
   const config = { count: { label: "Rolls" } } satisfies ChartConfig;
   return (
@@ -88,7 +92,14 @@ export function RollTypesCard({ data }: { data: NamedCount[] }) {
           <BarChart data={data} layout="vertical" margin={{ left: 8, right: 16 }}>
             <CartesianGrid horizontal={false} strokeOpacity={0.25} />
             <XAxis type="number" allowDecimals={false} tickLine={false} axisLine={false} />
-            <YAxis type="category" dataKey="name" width={130} tickLine={false} axisLine={false} />
+            <YAxis
+              type="category"
+              dataKey="name"
+              width={isMobile ? 92 : 130}
+              fontSize={isMobile ? 11 : 12}
+              tickLine={false}
+              axisLine={false}
+            />
             <ChartTooltip cursor={{ fillOpacity: 0.06 }} content={<ChartTooltipContent />} />
             <Bar dataKey="count" radius={3} barSize={20}>
               {data.map((d) => (
@@ -105,6 +116,7 @@ export function RollTypesCard({ data }: { data: NamedCount[] }) {
 export type HistBucket = { face: number; count: number; byName: { name: string; count: number }[] };
 
 export function D20HistogramCard({ data }: { data: HistBucket[] }) {
+  const isMobile = useIsMobile();
   const total = data.reduce((n, d) => n + d.count, 0);
   if (total === 0) return null;
   const expected = total / 20;
@@ -123,7 +135,14 @@ export function D20HistogramCard({ data }: { data: HistBucket[] }) {
         <ChartContainer config={config} className="h-56 w-full">
           <BarChart data={data} margin={{ left: -20, right: 8 }}>
             <CartesianGrid vertical={false} strokeOpacity={0.25} />
-            <XAxis dataKey="face" tickLine={false} axisLine={false} interval={0} fontSize={11} />
+            {/* 20 ticks don't fit a phone; show every other face there. */}
+            <XAxis
+              dataKey="face"
+              tickLine={false}
+              axisLine={false}
+              interval={isMobile ? 1 : 0}
+              fontSize={11}
+            />
             <YAxis allowDecimals={false} tickLine={false} axisLine={false} />
             <ChartTooltip
               cursor={{ fillOpacity: 0.06 }}
@@ -165,6 +184,7 @@ export function D20HistogramCard({ data }: { data: HistBucket[] }) {
 export type PactRow = { name: string; color: string; nat20: number; nat1: number };
 
 export function DicePactsCard({ rows }: { rows: PactRow[] }) {
+  const isMobile = useIsMobile();
   if (rows.length === 0) return null;
   // nat1 mirrored negative for the diverging layout.
   const data = rows.map((r) => ({ ...r, nat1: -r.nat1 }));
@@ -193,7 +213,14 @@ export function DicePactsCard({ rows }: { rows: PactRow[] }) {
               axisLine={false}
               fontSize={11}
             />
-            <YAxis type="category" dataKey="name" width={130} tickLine={false} axisLine={false} />
+            <YAxis
+              type="category"
+              dataKey="name"
+              width={isMobile ? 92 : 130}
+              fontSize={isMobile ? 11 : 12}
+              tickLine={false}
+              axisLine={false}
+            />
             <ChartTooltip
               content={
                 <ChartTooltipContent

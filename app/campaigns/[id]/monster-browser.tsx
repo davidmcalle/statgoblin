@@ -55,7 +55,7 @@ export function MonsterBrowser({
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder="Search monsters…"
-          className="ml-auto w-44 h-8"
+          className="h-8 w-full sm:ml-auto sm:w-44"
         />
         <Select items={SORTS} value={sort} onValueChange={(v) => setSort(v ?? "cr")}>
           <SelectTrigger className="w-36" size="sm">

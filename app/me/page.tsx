@@ -27,7 +27,7 @@ export default async function MePage() {
   const avgD20 = total.d20Rolls > 0 ? total.d20Sum / total.d20Rolls : null;
 
   return (
-    <main className="mx-auto w-full max-w-4xl flex-1 space-y-8 p-6">
+    <main className="mx-auto w-full max-w-4xl flex-1 space-y-8 p-4 sm:p-6">
       <div>
         <h1 className="text-2xl font-bold">Your characters</h1>
         <p className="text-sm text-muted-foreground">

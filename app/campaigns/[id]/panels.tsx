@@ -173,21 +173,24 @@ export function ItemsCard({ items }: { items: ItemUsage[] }) {
       <CardContent>
         <ul className="space-y-2">
           {items.map((i) => (
-            <li key={i.itemName} className="flex items-center gap-3 text-sm">
-              <span className="w-40 shrink-0 truncate font-medium">{i.itemName}</span>
-              <span className="w-24 shrink-0">
+            <li key={i.itemName} className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
+              <span className="min-w-0 flex-1 truncate font-medium sm:w-40 sm:flex-none">
+                {i.itemName}
+              </span>
+              <span className="shrink-0 sm:w-24">
                 <Badge variant="outline" className="capitalize">
                   {ITEM_TYPE_LABEL[i.itemType ?? ""] ?? i.itemType ?? "?"}
                 </Badge>
               </span>
-              <span className="h-2 flex-1 rounded bg-muted">
+              {/* Usage bar gets its own line on phones. */}
+              <span className="order-last h-2 w-full rounded bg-muted sm:order-none sm:w-auto sm:flex-1">
                 <span
                   className="block h-2 rounded bg-primary/60"
                   style={{ width: `${(i.uses / maxUses) * 100}%` }}
                 />
               </span>
-              <span className="w-14 shrink-0 text-right text-muted-foreground">×{i.uses}</span>
-              <span className="w-24 shrink-0 text-right text-muted-foreground">
+              <span className="shrink-0 text-right text-muted-foreground sm:w-14">×{i.uses}</span>
+              <span className="shrink-0 whitespace-nowrap text-right text-muted-foreground sm:w-24">
                 {i.damage > 0 ? `${i.damage} dmg` : i.healing > 0 ? `${i.healing} heal` : ""}
               </span>
             </li>

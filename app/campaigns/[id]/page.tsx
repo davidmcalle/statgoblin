@@ -220,20 +220,20 @@ export default async function CampaignPage({
     kind === "pc" ? [] : monsterCards.filter((c) => (!kind || c.kind === kind) && matchesActor(c));
 
   return (
-    <main className="mx-auto w-full max-w-4xl flex-1 space-y-8 p-6">
+    <main className="mx-auto w-full max-w-4xl flex-1 space-y-6 p-4 sm:space-y-8 sm:p-6">
       <LiveRefresh campaignId={id} />
 
-      <div className="flex items-center gap-4 border-b pb-6">
+      <div className="flex items-center gap-3 border-b pb-4 sm:gap-4 sm:pb-6">
         {campaign.image ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={campaign.image} alt="" className="h-14 w-14 rounded-xl object-cover" />
+          <img src={campaign.image} alt="" className="h-12 w-12 rounded-xl object-cover sm:h-14 sm:w-14" />
         ) : (
-          <span className="flex h-14 w-14 items-center justify-center rounded-xl bg-gradient-to-br from-primary/20 to-primary/5 text-xl font-bold">
+          <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-primary/20 to-primary/5 text-xl font-bold sm:h-14 sm:w-14">
             {campaign.name.slice(0, 1)}
           </span>
         )}
         <div className="min-w-0">
-          <h1 className="truncate text-3xl font-bold tracking-tight">{campaign.name}</h1>
+          <h1 className="truncate text-2xl font-bold tracking-tight sm:text-3xl">{campaign.name}</h1>
           <div className="mt-1 flex items-center gap-2 text-sm text-muted-foreground">
             <Badge variant={member.role === "gm" ? "default" : "secondary"}>
               {member.role === "gm" ? "GM" : "Player"}
@@ -250,7 +250,8 @@ export default async function CampaignPage({
         </div>
       </div>
 
-      <div className="flex flex-wrap items-start justify-between gap-3">
+      {/* Phones: view toggle first, filters collapse beneath it. */}
+      <div className="flex flex-col-reverse gap-3 sm:flex-row sm:items-start sm:justify-between">
         <FilterBar
           pcActors={actors
             .filter((a) => effectiveKind(a) === "pc")
@@ -358,6 +359,7 @@ export default async function CampaignPage({
       {isCreator && (
         <CampaignSettings
           campaign={campaign}
+          members={members}
           apiKeys={campaign.apiKeys.map((k) => ({
             id: k.id,
             name: k.name,

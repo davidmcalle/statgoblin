@@ -181,7 +181,7 @@ export function CharacterCard({
       </Card>
 
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="max-w-lg">
+        <DialogContent className="max-w-[calc(100%-2rem)] sm:max-w-lg">
           <DialogHeader>
             <div className="flex items-center gap-4">
               <Avatar data={data} size={64} />
