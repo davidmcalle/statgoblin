@@ -1,54 +1,37 @@
-// Placeholder brand mark: two d20s — a cursed 1 and a blessed 20. Swap for
-// the goblin mascot when the art exists.
-export function TwoDice({ size = 22 }: { size?: number }) {
+// Brand mark: an outlined d20 with a natural 20 face-on.
+export function D20Mark({ size = 24 }: { size?: number }) {
   return (
     <svg
-      viewBox="0 0 52 26"
-      width={(size / 26) * 52}
+      viewBox="0 0 24 24"
+      width={size}
       height={size}
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.7"
+      strokeLinejoin="round"
       aria-hidden
       className="shrink-0"
     >
-      <g>
-        <polygon
-          points="13,1 24,7 24,19 13,25 2,19 2,7"
-          fill="#ef4444"
-          stroke="#b91c1c"
-          strokeWidth="1.5"
-          strokeLinejoin="round"
-        />
-        <text
-          x="13"
-          y="17.5"
-          textAnchor="middle"
-          fontSize="12"
-          fontWeight="800"
-          fill="#fff"
-          fontFamily="inherit"
-        >
-          1
-        </text>
-      </g>
-      <g>
-        <polygon
-          points="39,1 50,7 50,19 39,25 28,19 28,7"
-          fill="#22c55e"
-          stroke="#15803d"
-          strokeWidth="1.5"
-          strokeLinejoin="round"
-        />
-        <text
-          x="39"
-          y="17"
-          textAnchor="middle"
-          fontSize="10"
-          fontWeight="800"
-          fill="#fff"
-          fontFamily="inherit"
-        >
-          20
-        </text>
-      </g>
+      <path d="M12 1.2 L21.4 6.6 L21.4 17.4 L12 22.8 L2.6 17.4 L2.6 6.6 Z" />
+      {/* light facet hints, kept clear of the number */}
+      <path
+        d="M12 1.2 L12 4.4 M21.4 6.6 L18.6 8.2 M2.6 6.6 L5.4 8.2 M12 22.8 L12 19.8 M21.4 17.4 L18.6 16 M2.6 17.4 L5.4 16"
+        strokeOpacity="0.55"
+        strokeWidth="1.2"
+      />
+      <text
+        x="12"
+        y="12.6"
+        textAnchor="middle"
+        dominantBaseline="central"
+        fontSize="9"
+        fontWeight="800"
+        fill="currentColor"
+        stroke="none"
+        fontFamily="inherit"
+      >
+        20
+      </text>
     </svg>
   );
 }

@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { ClerkProvider, UserButton } from "@clerk/nextjs";
 import { auth } from "@clerk/nextjs/server";
 import Link from "next/link";
-import { TwoDice } from "@/components/logo";
+import { D20Mark } from "@/components/logo";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 
@@ -31,20 +31,14 @@ export default async function RootLayout({
     <html
       lang="en"
       suppressHydrationWarning
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      className={`${geistSans.variable} ${geistMono.variable} dark h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">
-        {/* Follow the OS theme: shadcn's dark tokens hang off a .dark class,
-            so mirror prefers-color-scheme onto <html> before paint. */}
-        <script
-          dangerouslySetInnerHTML={{
-            __html: `(function(){var m=window.matchMedia('(prefers-color-scheme: dark)');function a(){document.documentElement.classList.toggle('dark',m.matches)}a();m.addEventListener('change',a)})()`,
-          }}
-        />
+        {/* Dark by design — the goblin lives in a cave. */}
         <ClerkProvider>
           <header className="flex items-center gap-6 border-b px-6 py-3">
             <Link href="/" className="flex items-center gap-2 text-lg font-bold">
-              <TwoDice size={24} />
+              <D20Mark size={24} />
               StatGoblin
             </Link>
             {userId && (
