@@ -6,4 +6,5 @@ echo "statgoblin: applying migrations"
 # between stages (it resolves bundled wasm relative to its own realpath).
 node node_modules/prisma/build/index.js migrate deploy
 echo "statgoblin: starting server"
+export HOSTNAME=0.0.0.0
 exec node server.js
