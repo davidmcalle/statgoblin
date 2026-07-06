@@ -28,6 +28,7 @@ import {
   SKILL_NAMES,
   characterColors,
 } from "@/lib/dnd5e-meta";
+import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { CampaignSettings } from "./settings";
 import { LiveRefresh } from "./live-refresh";
@@ -228,21 +229,30 @@ export default async function CampaignPage({
     <main className="mx-auto w-full max-w-4xl flex-1 space-y-8 p-6">
       <LiveRefresh campaignId={id} />
 
-      <div className="flex items-center gap-4">
+      <div className="flex items-center gap-4 border-b pb-6">
         {campaign.image ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={campaign.image} alt="" className="h-16 w-16 rounded-lg object-cover" />
+          <img src={campaign.image} alt="" className="h-14 w-14 rounded-xl object-cover" />
         ) : (
-          <span className="flex h-16 w-16 items-center justify-center rounded-lg bg-muted text-3xl">
-            🎲
+          <span className="flex h-14 w-14 items-center justify-center rounded-xl bg-gradient-to-br from-primary/20 to-primary/5 text-xl font-bold">
+            {campaign.name.slice(0, 1)}
           </span>
         )}
-        <div>
-          <h1 className="text-2xl font-bold">{campaign.name}</h1>
-          <p className="text-sm text-muted-foreground">
-            {campaign.members.length} member{campaign.members.length === 1 ? "" : "s"} ·{" "}
-            {member.role === "gm" ? "you're the GM" : "player"}
-          </p>
+        <div className="min-w-0">
+          <h1 className="truncate text-3xl font-bold tracking-tight">{campaign.name}</h1>
+          <div className="mt-1 flex items-center gap-2 text-sm text-muted-foreground">
+            <Badge variant={member.role === "gm" ? "default" : "secondary"}>
+              {member.role === "gm" ? "GM" : "Player"}
+            </Badge>
+            <span>
+              {campaign.members.length} member{campaign.members.length === 1 ? "" : "s"}
+            </span>
+            {sessionList.length > 0 && (
+              <span>
+                · {sessionList.length} session{sessionList.length === 1 ? "" : "s"}
+              </span>
+            )}
+          </div>
         </div>
       </div>
 
@@ -283,14 +293,14 @@ export default async function CampaignPage({
       )}
 
       <Section title="What the table rolls" description="Where the dice get pointed">
-        <div className="grid gap-4 lg:grid-cols-2">
+        <div className="grid gap-4">
           <SkillBarsCard
             data={skillBars}
             legend={abilitiesInUse.map((a) => ({ label: ABILITY_NAMES[a], color: ABILITY_COLORS[a] }))}
           />
           <RollTypesCard data={typeBars} />
         </div>
-        <div className="grid gap-4 lg:grid-cols-2">
+        <div className="grid gap-4">
           <BubblePackCard
             title="Skill bubbles"
             description="Bubble size = times rolled, colored by ability"

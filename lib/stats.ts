@@ -399,6 +399,69 @@ export async function recentDeathSaves(
   });
 }
 
+export type MyCharacterRow = {
+  actorId: string;
+  campaignId: string;
+  campaignName: string;
+  name: string;
+  image: string;
+  stats: ActorStats;
+};
+
+/** All characters assigned to a user across every campaign, with their stats. */
+export async function myCharacters(userId: string): Promise<MyCharacterRow[]> {
+  const rows = await prisma.$queryRaw<
+    {
+      actor_id: string;
+      campaign_id: string;
+      campaign_name: string;
+      name: string;
+      image: string;
+      all_rolls: bigint;
+      d20_rolls: bigint;
+      nat20s: bigint;
+      nat1s: bigint;
+      avg_d20: number | null;
+      damage: number | null;
+      healing: number | null;
+    }[]
+  >`
+    SELECT a.id AS actor_id, a.campaign_id, c.name AS campaign_name, a.name, a.image,
+           COUNT(r.*)                                                            AS all_rolls,
+           COUNT(r.*) FILTER (WHERE r.d20 IS NOT NULL)                           AS d20_rolls,
+           COUNT(r.*) FILTER (WHERE r.is_nat20)                                  AS nat20s,
+           COUNT(r.*) FILTER (WHERE r.is_nat1)                                   AS nat1s,
+           AVG(r.d20)                                                            AS avg_d20,
+           COALESCE(SUM(r.damage_total) FILTER (WHERE r.roll_type = 'damage'), 0)  AS damage,
+           COALESCE(SUM(r.damage_total) FILTER (WHERE r.roll_type = 'healing'), 0) AS healing
+    FROM actors a
+    JOIN campaigns c ON c.id = a.campaign_id
+    LEFT JOIN rolls r
+      ON r.campaign_id = a.campaign_id
+     AND r.actor_fid = a.foundry_actor_id
+     AND r.deleted_at IS NULL
+    WHERE a.assigned_user_id = ${userId}
+    GROUP BY a.id, a.campaign_id, c.name, a.name, a.image
+    ORDER BY all_rolls DESC`;
+  return rows.map((r) => ({
+    actorId: r.actor_id,
+    campaignId: r.campaign_id,
+    campaignName: r.campaign_name,
+    name: r.name,
+    image: r.image,
+    stats: {
+      actorName: r.name,
+      allRolls: Number(r.all_rolls),
+      d20Rolls: Number(r.d20_rolls),
+      nat20s: Number(r.nat20s),
+      nat1s: Number(r.nat1s),
+      avgD20: r.avg_d20 === null ? null : Number(r.avg_d20),
+      damage: Number(r.damage ?? 0),
+      healing: Number(r.healing ?? 0),
+    },
+  }));
+}
+
 /** Distinct values for the filter bar — always unfiltered. */
 export async function filterOptions(campaignId: string) {
   const [actors, types] = await Promise.all([

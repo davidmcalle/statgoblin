@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { ClerkProvider, UserButton } from "@clerk/nextjs";
 import { auth } from "@clerk/nextjs/server";
 import Link from "next/link";
+import { D20Icon } from "@/components/d20-icon";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 
@@ -41,11 +42,22 @@ export default async function RootLayout({
           }}
         />
         <ClerkProvider>
-          <header className="flex items-center justify-between border-b border-gray-200 px-6 py-3 dark:border-gray-800">
-            <Link href="/" className="text-lg font-bold">
-              🎲 Rollwatch
+          <header className="flex items-center gap-6 border-b px-6 py-3">
+            <Link href="/" className="flex items-center gap-2 text-lg font-bold">
+              <D20Icon size={22} />
+              Rollwatch
             </Link>
-            {userId && <UserButton />}
+            {userId && (
+              <nav className="flex items-center gap-4 text-sm text-muted-foreground">
+                <Link href="/" className="hover:text-foreground">
+                  Campaigns
+                </Link>
+                <Link href="/me" className="hover:text-foreground">
+                  My characters
+                </Link>
+              </nav>
+            )}
+            <span className="ml-auto">{userId && <UserButton />}</span>
           </header>
           {children}
         </ClerkProvider>
