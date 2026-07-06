@@ -33,6 +33,8 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { CampaignSettings } from "./settings";
 import { ClearRolls } from "./clear-rolls";
+import { SendSummary } from "./send-summary";
+import { ShowInactiveToggle } from "./show-inactive-toggle";
 import { LiveRefresh } from "./live-refresh";
 import { FilterBar } from "./filter-bar";
 import { CharacterTable, DeathSavesCard, ItemsCard, Section, StatCards } from "./panels";
@@ -64,6 +66,7 @@ export default async function CampaignPage({
     session?: string;
     by?: string;
     view?: string;
+    showAll?: string;
   }>;
 }) {
   const [{ id }, sp] = await Promise.all([params, searchParams]);
@@ -215,9 +218,18 @@ export default async function CampaignPage({
   // Card sections obey the slicers too: kind hides whole groups, the
   // character filter narrows to that one card.
   const matchesActor = (c: CharacterCardData) => !filters.actor || c.name === filters.actor;
-  const visiblePcCards = !kind || kind === "pc" ? pcCards.filter(matchesActor) : [];
-  const visibleMonsterCards =
+  const slicedPcCards = !kind || kind === "pc" ? pcCards.filter(matchesActor) : [];
+  const slicedMonsterCards =
     kind === "pc" ? [] : monsterCards.filter((c) => (!kind || c.kind === kind) && matchesActor(c));
+
+  // Zero-roll creatures stay hidden until the GM asks for them.
+  const showAll = sp.showAll === "1";
+  const isActive = (c: CharacterCardData) => (c.stats?.allRolls ?? 0) > 0;
+  const visiblePcCards = showAll ? slicedPcCards : slicedPcCards.filter(isActive);
+  const visibleMonsterCards = showAll ? slicedMonsterCards : slicedMonsterCards.filter(isActive);
+  const inactiveCount =
+    slicedPcCards.filter((c) => !isActive(c)).length +
+    slicedMonsterCards.filter((c) => !isActive(c)).length;
 
   return (
     <main className="mx-auto w-full max-w-4xl flex-1 space-y-6 p-4 sm:space-y-8 sm:p-6">
@@ -282,8 +294,11 @@ export default async function CampaignPage({
         <>
           <StatCards totals={totals} />
 
-      {(visiblePcCards.length > 0 || (isCreator && visibleMonsterCards.length > 0)) && (
+      {(visiblePcCards.length > 0 ||
+        (isCreator && visibleMonsterCards.length > 0) ||
+        inactiveCount > 0) && (
         <Section title="The party" description="Each character's story so far">
+          <ShowInactiveToggle hiddenCount={inactiveCount} showAll={showAll} />
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {visiblePcCards.map((c) => (
               <CharacterCard
@@ -345,6 +360,14 @@ export default async function CampaignPage({
 
           <DeathSavesCard saves={deathSaves} />
         </>
+      )}
+
+      {isCreator && (
+        <SendSummary
+          campaignId={id}
+          sessions={sessionList}
+          webhookConfigured={!!campaign.discordWebhookUrl}
+        />
       )}
 
       <ClearRolls

@@ -32,6 +32,9 @@ model Campaign {
   // see (assignments, kind tags, deletions, settings). The freshness probe
   // folds this in, so every client's poll picks the change up.
   activityAt DateTime @default(now()) @map("activity_at") @db.Timestamptz(6)
+  // Discord webhook for "Send summary" — the GM creates a webhook in their own
+  // server/channel and pastes the URL here. Empty = feature off.
+  discordWebhookUrl String @default("") @map("discord_webhook_url")
 
   members CampaignMember[]
   events  RawEvent[]

@@ -12,6 +12,14 @@ import {
   requireUserId,
   touchCampaign,
 } from "@/lib/campaigns";
+import { buildSummaryEmbed, isValidWebhookUrl, postWebhook } from "@/lib/discord";
+import {
+  actorStats,
+  campaignTotals,
+  itemUsage,
+  recentDeathSaves,
+  sessions,
+} from "@/lib/stats";
 
 // Server actions are untrusted entry points (reachable as POSTs without the
 // UI) — every one re-authenticates via Clerk and re-authorizes against the DB.
@@ -52,17 +60,74 @@ export async function joinCampaign(inviteCode: string): Promise<void> {
   redirect(`/campaigns/${campaign.id}`);
 }
 
-/** Creator-only: rename / set image. */
+/** Creator-only: rename / set image / Discord webhook. */
 export async function updateCampaign(campaignId: string, formData: FormData): Promise<void> {
   const userId = await requireUserId();
   await requireCreator(campaignId, userId);
   const name = nameSchema.parse(formData.get("name"));
   const image = z.string().trim().max(500).default("").parse(formData.get("image") ?? "");
+  const discordWebhookUrl = z
+    .string()
+    .trim()
+    .max(400)
+    .default("")
+    .parse(formData.get("discordWebhookUrl") ?? "");
+  if (discordWebhookUrl && !isValidWebhookUrl(discordWebhookUrl)) {
+    throw new Error("That doesn't look like a Discord webhook URL");
+  }
   await prisma.campaign.update({
     where: { id: campaignId },
-    data: { name, image, activityAt: new Date() },
+    data: { name, image, discordWebhookUrl, activityAt: new Date() },
   });
   revalidatePath(`/campaigns/${campaignId}`);
+}
+
+/**
+ * Creator-only: post a stat summary of the picked sessions to the campaign's
+ * Discord webhook. Sessions are play dates; capped at 10 per summary.
+ */
+export async function sendDiscordSummary(
+  campaignId: string,
+  dates: string[],
+): Promise<{ sent: boolean; error?: string }> {
+  const userId = await requireUserId();
+  const campaign = await requireCreator(campaignId, userId);
+  if (!campaign.discordWebhookUrl) {
+    return { sent: false, error: "Set a Discord webhook URL in campaign settings first" };
+  }
+  const all = await sessions(campaignId);
+  const valid = new Map(all.map((s) => [s.date, s]));
+  const picked = [...new Set(dates)]
+    .filter((d) => valid.has(d))
+    .sort()
+    .slice(0, 10)
+    .map((d) => valid.get(d)!);
+  if (picked.length === 0) return { sent: false, error: "Pick at least one session" };
+
+  const filters = { dates: picked.map((s) => s.date), includeHidden: false };
+  const [totals, actorStats_, items, deathSaves] = await Promise.all([
+    campaignTotals(campaignId, filters),
+    actorStats(campaignId, filters),
+    itemUsage(campaignId, filters, 5),
+    recentDeathSaves(campaignId, filters, 6),
+  ]);
+
+  try {
+    await postWebhook(
+      campaign.discordWebhookUrl,
+      buildSummaryEmbed({
+        campaignName: campaign.name,
+        sessions: picked,
+        totals,
+        actorStats: actorStats_,
+        items,
+        deathSaves,
+      }),
+    );
+  } catch (e) {
+    return { sent: false, error: e instanceof Error ? e.message : "Failed to reach Discord" };
+  }
+  return { sent: true };
 }
 
 /** Creator-only: mint an additional API key; plaintext returned once. */

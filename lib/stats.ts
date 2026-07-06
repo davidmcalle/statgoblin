@@ -12,6 +12,8 @@ export type StatFilters = {
   days?: number;
   /** ISO date ("2026-07-06") — one session = one distinct play date. */
   session?: string;
+  /** Several session dates at once (Discord summaries). Wins over `session`. */
+  dates?: string[];
   /**
    * Foundry actor ids to include — the resolved form of a kind filter
    * (pc/npc/monster). Kind is an actors-table property (override + auto rule),
@@ -52,12 +54,17 @@ function sqlFilters(campaignId: string, f: StatFilters): Prisma.Sql {
     ${f.type ? Prisma.sql`AND roll_type = ${f.type}` : Prisma.empty}
     ${f.actorFids ? Prisma.sql`AND actor_fid = ANY(${f.actorFids})` : Prisma.empty}
     ${f.includeHidden ? Prisma.empty : Prisma.sql`AND is_hidden = false`}
-    ${f.session ? Prisma.sql`AND rolled_at::date = ${f.session}::date` : Prisma.empty}
+    ${f.dates?.length ? Prisma.sql`AND rolled_at::date = ANY(${f.dates}::date[])` : Prisma.empty}
+    ${!f.dates?.length && f.session ? Prisma.sql`AND rolled_at::date = ${f.session}::date` : Prisma.empty}
     ${f.days ? Prisma.sql`AND rolled_at > now() - make_interval(days => ${f.days})` : Prisma.empty}`;
 }
 
 function whereFilters(campaignId: string, f: StatFilters) {
   const sessionStart = f.session ? new Date(`${f.session}T00:00:00Z`) : undefined;
+  const dayRange = (date: string) => {
+    const start = new Date(`${date}T00:00:00Z`);
+    return { rolledAt: { gte: start, lt: new Date(start.getTime() + 86_400_000) } };
+  };
   return {
     campaignId,
     deletedAt: null,
@@ -65,11 +72,13 @@ function whereFilters(campaignId: string, f: StatFilters) {
     ...(f.type ? { rollType: f.type } : {}),
     ...(f.actorFids ? { actorFid: { in: f.actorFids } } : {}),
     ...(f.includeHidden ? {} : { isHidden: false }),
-    ...(sessionStart
-      ? { rolledAt: { gte: sessionStart, lt: new Date(sessionStart.getTime() + 86_400_000) } }
-      : f.days
-        ? { rolledAt: { gt: new Date(Date.now() - f.days * 86_400_000) } }
-        : {}),
+    ...(f.dates?.length
+      ? { OR: f.dates.map(dayRange) }
+      : sessionStart
+        ? { rolledAt: { gte: sessionStart, lt: new Date(sessionStart.getTime() + 86_400_000) } }
+        : f.days
+          ? { rolledAt: { gt: new Date(Date.now() - f.days * 86_400_000) } }
+          : {}),
   };
 }
 

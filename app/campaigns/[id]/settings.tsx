@@ -21,6 +21,7 @@ type Campaign = {
   image: string;
   inviteCode: string;
   hideDeathSaves: boolean;
+  discordWebhookUrl: string;
 };
 
 export type ApiKeyRow = {
@@ -85,6 +86,19 @@ export function CampaignSettings({
             name="image"
             defaultValue={campaign.image}
             placeholder="https://…"
+            className="mt-1 w-full"
+          />
+        </label>
+        <label className="block">
+          <span className="text-sm font-semibold">Discord webhook URL</span>
+          <p className="text-xs text-muted-foreground">
+            In your Discord server: channel → Integrations → Webhooks → New Webhook → Copy URL.
+            Enables &quot;Send summary to Discord&quot;.
+          </p>
+          <Input
+            name="discordWebhookUrl"
+            defaultValue={campaign.discordWebhookUrl}
+            placeholder="https://discord.com/api/webhooks/…"
             className="mt-1 w-full"
           />
         </label>
