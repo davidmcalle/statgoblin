@@ -3,6 +3,7 @@ import { z } from "zod";
 import type { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/db/prisma";
 import { hashIngestKey } from "@/lib/campaigns";
+import { deriveRawEvent } from "@/lib/derive";
 
 // The Foundry module POSTs cross-origin with Authorization + X-Campaign-Id
 // headers, so the browser preflights every request — answer OPTIONS and echo
@@ -60,7 +61,7 @@ export async function POST(request: Request) {
   // message several times — last write wins, receivedCount records the churn.
   // Deletes keep the final payload and stamp deletedAt.
   const deletedAt = eventType === "deleted" ? new Date() : null;
-  await prisma.rawEvent.upsert({
+  const row = await prisma.rawEvent.upsert({
     where: { campaignId_messageId: { campaignId: campaign.id, messageId } },
     create: {
       campaignId: campaign.id,
@@ -76,6 +77,10 @@ export async function POST(request: Request) {
       receivedCount: { increment: 1 },
     },
   });
+
+  // Incremental derive — same code path reprocess uses, so live ingest and
+  // rebuilds can't drift apart.
+  await deriveRawEvent(row);
 
   return Response.json({ ok: true }, { headers: CORS_HEADERS });
 }

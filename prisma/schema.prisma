@@ -48,6 +48,94 @@ model CampaignMember {
   @@map("campaign_members")
 }
 
+// ——— Derived layer ————————————————————————————————————————————————————————
+// Everything below `raw_events` is disposable: the parser (lib/derive)
+// rebuilds it from raw payloads. Never write these tables from anywhere else.
+
+// One row per individual roll inside a message (a midi-qol attack message
+// carries attack + damage rolls → two rows). Denormalized on purpose —
+// dashboard queries hit this table alone.
+model Roll {
+  id         String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  campaignId String @map("campaign_id") @db.Uuid
+  rawEventId String @map("raw_event_id") @db.Uuid
+  messageId  String @map("message_id")
+  // Position within the message's rolls array; usage cards get index 0.
+  rollIndex Int    @map("roll_index")
+  rollType  String @map("roll_type")
+
+  actorFid  String? @map("actor_fid")
+  actorName String? @map("actor_name")
+  tokenFid  String? @map("token_fid")
+  tokenName String? @map("token_name")
+
+  authorName String? @map("author_name")
+  authorRole String? @map("author_role")
+
+  itemName     String? @map("item_name")
+  itemType     String? @map("item_type")
+  activityType String? @map("activity_type")
+
+  formula String?
+  total   Float?
+  // Raw d20 die result (null for damage/healing/usage).
+  d20 Int?
+  // -1 disadvantage, 0 normal, 1 advantage.
+  advantageState Int?    @map("advantage_state")
+  isNat20        Boolean @default(false) @map("is_nat20")
+  isNat1         Boolean @default(false) @map("is_nat1")
+
+  // midi-qol combat detail, where present.
+  isHit       Boolean? @map("is_hit")
+  isCritical  Boolean? @map("is_critical")
+  damageTotal Float?   @map("damage_total")
+  damageType  String?  @map("damage_type")
+  targetCount Int?     @map("target_count")
+
+  // Enricher detail (flags.rollwatch).
+  ability        String?
+  skill          String?
+  profMultiplier Float?  @map("prof_multiplier")
+
+  rolledAt  DateTime  @map("rolled_at") @db.Timestamptz(6)
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
+
+  rawEvent RawEvent @relation(fields: [rawEventId], references: [id], onDelete: Cascade)
+
+  @@unique([rawEventId, rollIndex])
+  @@index([campaignId, rolledAt])
+  @@index([campaignId, actorFid])
+  @@index([campaignId, rollType])
+  @@map("rolls")
+}
+
+// Auto-discovered actors per campaign; assignment links them to Clerk users
+// (players claim characters, GM owns the monsters).
+model Actor {
+  id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  campaignId     String   @map("campaign_id") @db.Uuid
+  foundryActorId String   @map("foundry_actor_id")
+  name           String
+  image          String   @default("")
+  assignedUserId String?  @map("assigned_user_id")
+  rollCount      Int      @default(0) @map("roll_count")
+  lastSeenAt     DateTime @map("last_seen_at") @db.Timestamptz(6)
+
+  @@unique([campaignId, foundryActorId])
+  @@index([campaignId, assignedUserId])
+  @@map("actors")
+}
+
+// Parser bookkeeping: bump PARSER_VERSION in lib/derive to mark all previously
+// derived rows stale; reprocess rebuilds campaigns whose version lags.
+model DeriveState {
+  campaignId    String   @id @map("campaign_id") @db.Uuid
+  parserVersion Int      @map("parser_version")
+  derivedAt     DateTime @updatedAt @map("derived_at") @db.Timestamptz(6)
+
+  @@map("derive_state")
+}
+
 // One row per Foundry chat message, upserted on every event. `payload` is the
 // latest collectedData mirrored verbatim (JSONB) — the source of truth that
 // derived tables are rebuilt from later. Deletes keep the last payload and
@@ -65,6 +153,7 @@ model RawEvent {
   deletedAt     DateTime? @map("deleted_at") @db.Timestamptz(6)
 
   campaign Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  rolls    Roll[]
 
   @@unique([campaignId, messageId])
   @@index([campaignId, updatedAt])
