@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { prisma } from "@/lib/db/prisma";
 import { requireUserId } from "@/lib/campaigns";
 import { CampaignSettings } from "./settings";
+import { LiveRefresh } from "./live-refresh";
 
 export const dynamic = "force-dynamic";
 
@@ -36,6 +37,7 @@ export default async function CampaignPage({ params }: { params: Promise<{ id: s
 
   return (
     <main className="mx-auto w-full max-w-4xl flex-1 p-6">
+      <LiveRefresh campaignId={id} />
       <div className="mb-6 flex items-center gap-4">
         {campaign.image ? (
           // eslint-disable-next-line @next/next/no-img-element
