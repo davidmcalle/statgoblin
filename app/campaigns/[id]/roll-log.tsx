@@ -128,9 +128,11 @@ function Die({ die }: { die: { f: number; r: number } }) {
 export function RollLog({
   rows,
   colors,
+  images,
 }: {
   rows: RollLogRow[];
   colors: Map<string, string>;
+  images: Map<string, string>;
 }) {
   if (rows.length === 0) {
     return (
@@ -176,6 +178,21 @@ export function RollLog({
                   className="flex items-center gap-4 rounded-lg border bg-card p-4"
                   style={{ borderLeft: `3px solid ${color}` }}
                 >
+                  {r.actorName && images.get(r.actorName) ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={images.get(r.actorName)}
+                      alt=""
+                      className="h-11 w-11 shrink-0 rounded-full object-cover"
+                    />
+                  ) : (
+                    <span
+                      className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full font-bold text-white"
+                      style={{ background: color }}
+                    >
+                      {(r.actorName ?? "?").slice(0, 1)}
+                    </span>
+                  )}
                   <div className="min-w-0 flex-1">
                     <div className="flex items-baseline gap-2">
                       <span className="truncate font-semibold">{r.actorName ?? "—"}</span>

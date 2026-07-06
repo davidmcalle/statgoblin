@@ -264,7 +264,13 @@ export default async function CampaignPage({
         <ViewToggle view={view} />
       </div>
 
-      {view === "log" && <RollLog rows={logRows} colors={colors} />}
+      {view === "log" && (
+        <RollLog
+          rows={logRows}
+          colors={colors}
+          images={new Map(actors.filter((a) => a.image).map((a) => [a.name, a.image]))}
+        />
+      )}
 
       {view === "charts" && (
         <>
