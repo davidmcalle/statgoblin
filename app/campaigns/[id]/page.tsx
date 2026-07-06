@@ -4,14 +4,19 @@ import { requireUserId } from "@/lib/campaigns";
 import {
   actorSkillMatrix,
   actorStats,
+  actorTops,
   campaignTotals,
   d20Histogram,
   filterOptions,
+  itemUsage,
   recentDeathSaves,
   rollTypeCounts,
   skillAbilityBuckets,
   type StatFilters,
 } from "@/lib/stats";
+import { campaignMembers } from "@/lib/members";
+import { SKILL_NAMES as SKILL_LABELS } from "@/lib/dnd5e-meta";
+import { CharacterCard, type CharacterCardData } from "./character-cards";
 import {
   ABILITY_COLORS,
   ABILITY_NAMES,
@@ -23,7 +28,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { CampaignSettings } from "./settings";
 import { LiveRefresh } from "./live-refresh";
 import { FilterBar } from "./filter-bar";
-import { CharacterTable, DeathSavesCard, Section, StatCards } from "./panels";
+import { CharacterTable, DeathSavesCard, ItemsCard, Section, StatCards } from "./panels";
 import {
   D20HistogramCard,
   DicePactsCard,
@@ -74,24 +79,70 @@ export default async function CampaignPage({
     days: days && Number.isFinite(days) ? days : undefined,
   };
 
-  const [events, stats, histogram, types, deathSaves, totals, skillBuckets, skillMatrix, options] =
-    await Promise.all([
-      prisma.rawEvent.findMany({
-        where: { campaignId: id, deletedAt: null },
-        orderBy: { updatedAt: "desc" },
-        take: 30,
-      }),
-      actorStats(id, filters),
-      d20Histogram(id, filters),
-      rollTypeCounts(id, filters),
-      recentDeathSaves(id, filters),
-      campaignTotals(id, filters),
-      skillAbilityBuckets(id, filters),
-      actorSkillMatrix(id, filters),
-      filterOptions(id),
-    ]);
+  const [
+    events,
+    stats,
+    histogram,
+    types,
+    deathSaves,
+    totals,
+    skillBuckets,
+    skillMatrix,
+    options,
+    items,
+    tops,
+    actors,
+    members,
+  ] = await Promise.all([
+    prisma.rawEvent.findMany({
+      where: { campaignId: id, deletedAt: null },
+      orderBy: { updatedAt: "desc" },
+      take: 30,
+    }),
+    actorStats(id, filters),
+    d20Histogram(id, filters),
+    rollTypeCounts(id, filters),
+    recentDeathSaves(id, filters),
+    campaignTotals(id, filters),
+    skillAbilityBuckets(id, filters),
+    actorSkillMatrix(id, filters),
+    filterOptions(id),
+    itemUsage(id, filters),
+    actorTops(id, filters),
+    prisma.actor.findMany({ where: { campaignId: id } }),
+    campaignMembers(id),
+  ]);
 
   const colors = characterColors(options.actors);
+  const memberName = new Map(members.map((m) => [m.userId, m.name]));
+  const statsByName = new Map(stats.map((s) => [s.actorName, s]));
+  const topsByName = new Map(tops.map((t) => [t.actorName, t]));
+
+  // Card per discovered actor; viewer's own characters first, then other
+  // players' characters. Unassigned actors are the GM's monster/NPC bucket.
+  const cardOf = (a: (typeof actors)[number]): CharacterCardData => ({
+    actorId: a.id,
+    name: a.name,
+    image: a.image,
+    color: colors.get(a.name) ?? FALLBACK,
+    assignedUserId: a.assignedUserId,
+    stats: statsByName.get(a.name) ?? null,
+    tops: topsByName.get(a.name)
+      ? {
+          ...topsByName.get(a.name)!,
+          topSkill: topsByName.get(a.name)!.topSkill
+            ? (SKILL_LABELS[topsByName.get(a.name)!.topSkill!] ?? topsByName.get(a.name)!.topSkill)
+            : null,
+        }
+      : null,
+  });
+  const byRolls = (x: CharacterCardData, y: CharacterCardData) =>
+    (y.stats?.allRolls ?? 0) - (x.stats?.allRolls ?? 0);
+  const pcCards = actors
+    .filter((a) => a.assignedUserId)
+    .map(cardOf)
+    .sort((x, y) => Number(y.assignedUserId === userId) - Number(x.assignedUserId === userId) || byRolls(x, y));
+  const monsterCards = actors.filter((a) => !a.assignedUserId).map(cardOf).sort(byRolls);
 
   const skillBars: NamedCount[] = skillBuckets.map((b) => {
     const ability = b.isSkill ? (SKILL_ABILITY[b.key] ?? b.ability) : b.key;
@@ -155,6 +206,42 @@ export default async function CampaignPage({
 
       <StatCards totals={totals} />
 
+      {(pcCards.length > 0 || (isCreator && monsterCards.length > 0)) && (
+        <Section title="The party" description="Each character's story so far">
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {pcCards.map((c) => (
+              <CharacterCard
+                key={c.actorId}
+                data={c}
+                isOwn={c.assignedUserId === userId}
+                ownerName={c.assignedUserId ? (memberName.get(c.assignedUserId) ?? null) : null}
+                members={members}
+                canAssign={isCreator}
+              />
+            ))}
+          </div>
+          {isCreator && monsterCards.length > 0 && (
+            <>
+              <h3 className="pt-2 text-sm font-semibold text-muted-foreground">
+                Monsters &amp; NPCs (GM only — assign player characters above via the selector)
+              </h3>
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                {monsterCards.map((c) => (
+                  <CharacterCard
+                    key={c.actorId}
+                    data={c}
+                    isOwn={false}
+                    ownerName={null}
+                    members={members}
+                    canAssign
+                  />
+                ))}
+              </div>
+            </>
+          )}
+        </Section>
+      )}
+
       <Section title="What the table rolls" description="Where the dice get pointed">
         <div className="grid gap-4 lg:grid-cols-2">
           <SkillBarsCard
@@ -163,6 +250,7 @@ export default async function CampaignPage({
           />
           <RollTypesCard data={typeBars} />
         </div>
+        <ItemsCard items={items} />
       </Section>
 
       <Section title="Dice fairness" description="Is the randomness actually random?">

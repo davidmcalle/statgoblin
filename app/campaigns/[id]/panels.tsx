@@ -7,7 +7,8 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import type { ActorStats, CampaignTotals, DeathSaveRow } from "@/lib/stats";
+import { Badge } from "@/components/ui/badge";
+import type { ActorStats, CampaignTotals, DeathSaveRow, ItemUsage } from "@/lib/stats";
 
 // Server-rendered panels: stat cards, character table, death saves.
 
@@ -140,6 +141,49 @@ export function DeathSavesCard({ saves }: { saves: DeathSaveRow[] }) {
               </span>
               <span className="ml-auto text-muted-foreground">
                 {s.rolledAt.toLocaleDateString("en-GB", { day: "numeric", month: "short" })}
+              </span>
+            </li>
+          ))}
+        </ul>
+      </CardContent>
+    </Card>
+  );
+}
+
+const ITEM_TYPE_LABEL: Record<string, string> = {
+  weapon: "weapon",
+  spell: "spell",
+  feat: "feature",
+  consumable: "consumable",
+  equipment: "equipment",
+};
+
+export function ItemsCard({ items }: { items: ItemUsage[] }) {
+  if (items.length === 0) return null;
+  const maxUses = Math.max(...items.map((i) => i.uses));
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Weapons, spells &amp; features</CardTitle>
+        <CardDescription>What the table reaches for, and what it costs the enemy</CardDescription>
+      </CardHeader>
+      <CardContent>
+        <ul className="space-y-2">
+          {items.map((i) => (
+            <li key={i.itemName} className="flex items-center gap-3 text-sm">
+              <span className="w-40 shrink-0 truncate font-medium">{i.itemName}</span>
+              <Badge variant="outline" className="shrink-0 capitalize">
+                {ITEM_TYPE_LABEL[i.itemType ?? ""] ?? i.itemType ?? "?"}
+              </Badge>
+              <span className="h-2 flex-1 rounded bg-muted">
+                <span
+                  className="block h-2 rounded bg-primary/60"
+                  style={{ width: `${(i.uses / maxUses) * 100}%` }}
+                />
+              </span>
+              <span className="w-14 shrink-0 text-right text-muted-foreground">×{i.uses}</span>
+              <span className="w-24 shrink-0 text-right text-muted-foreground">
+                {i.damage > 0 ? `${i.damage} dmg` : i.healing > 0 ? `${i.healing} heal` : ""}
               </span>
             </li>
           ))}

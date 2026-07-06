@@ -210,6 +210,80 @@ export async function actorSkillMatrix(
   };
 }
 
+export type ItemUsage = {
+  itemName: string;
+  itemType: string | null;
+  /** Distinct messages, so an attack (attack+damage rolls) counts once. */
+  uses: number;
+  damage: number;
+  healing: number;
+};
+
+/** Weapons, spells, feats, consumables — what gets reached for. */
+export async function itemUsage(
+  campaignId: string,
+  f: StatFilters = {},
+  limit = 14,
+): Promise<ItemUsage[]> {
+  const rows = await prisma.$queryRaw<
+    { item_name: string; item_type: string | null; uses: bigint; damage: number | null; healing: number | null }[]
+  >`
+    SELECT item_name,
+           MIN(item_type)                                                      AS item_type,
+           COUNT(DISTINCT message_id)                                          AS uses,
+           COALESCE(SUM(damage_total) FILTER (WHERE roll_type = 'damage'), 0)  AS damage,
+           COALESCE(SUM(damage_total) FILTER (WHERE roll_type = 'healing'), 0) AS healing
+    FROM rolls
+    WHERE ${sqlFilters(campaignId, f)}
+      AND item_name IS NOT NULL AND item_name <> ''
+    GROUP BY item_name
+    ORDER BY uses DESC
+    LIMIT ${limit}`;
+  return rows.map((r) => ({
+    itemName: r.item_name,
+    itemType: r.item_type,
+    uses: Number(r.uses),
+    damage: Number(r.damage ?? 0),
+    healing: Number(r.healing ?? 0),
+  }));
+}
+
+export type ActorTop = { actorName: string; topSkill: string | null; topItem: string | null };
+
+/** Each actor's most-rolled skill and most-used item. */
+export async function actorTops(campaignId: string, f: StatFilters = {}): Promise<ActorTop[]> {
+  const rows = await prisma.$queryRaw<
+    { actor_name: string; top_skill: string | null; top_item: string | null }[]
+  >`
+    WITH skills AS (
+      SELECT actor_name, skill,
+             ROW_NUMBER() OVER (PARTITION BY actor_name ORDER BY COUNT(*) DESC) rn
+      FROM rolls
+      WHERE ${sqlFilters(campaignId, f)} AND skill IS NOT NULL AND actor_name IS NOT NULL
+      GROUP BY actor_name, skill
+    ), items AS (
+      SELECT actor_name, item_name,
+             ROW_NUMBER() OVER (PARTITION BY actor_name ORDER BY COUNT(DISTINCT message_id) DESC) rn
+      FROM rolls
+      WHERE ${sqlFilters(campaignId, f)} AND item_name IS NOT NULL AND item_name <> '' AND actor_name IS NOT NULL
+      GROUP BY actor_name, item_name
+    ), names AS (
+      SELECT DISTINCT actor_name FROM rolls
+      WHERE ${sqlFilters(campaignId, f)} AND actor_name IS NOT NULL AND actor_name <> ''
+    )
+    SELECT n.actor_name,
+           s.skill      AS top_skill,
+           i.item_name  AS top_item
+    FROM names n
+    LEFT JOIN skills s ON s.actor_name = n.actor_name AND s.rn = 1
+    LEFT JOIN items i ON i.actor_name = n.actor_name AND i.rn = 1`;
+  return rows.map((r) => ({
+    actorName: r.actor_name,
+    topSkill: r.top_skill,
+    topItem: r.top_item,
+  }));
+}
+
 export type DeathSaveRow = {
   actorName: string | null;
   d20: number | null;

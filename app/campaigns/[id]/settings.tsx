@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { createApiKey, deleteApiKey, updateCampaign } from "@/app/actions/campaigns";
 import { CopyButton } from "@/app/_components/copy-button";
 
@@ -29,8 +29,11 @@ export function CampaignSettings({
   const [keyName, setKeyName] = useState("");
   const [saved, setSaved] = useState(false);
 
-  const inviteLink =
-    typeof window === "undefined" ? "" : `${window.location.origin}/join/${campaign.inviteCode}`;
+  // Origin only exists in the browser; render the relative link during SSR and
+  // upgrade after mount so server and client HTML match.
+  const [origin, setOrigin] = useState("");
+  useEffect(() => setOrigin(window.location.origin), []);
+  const inviteLink = `${origin}/join/${campaign.inviteCode}`;
 
   return (
     <details className="rounded-lg border border-gray-200 p-4 dark:border-gray-800">

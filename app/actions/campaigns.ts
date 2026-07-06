@@ -75,6 +75,26 @@ export async function createApiKey(
   return { ingestKey: key };
 }
 
+/**
+ * Creator-only: link an actor to a member (their character) or clear the link
+ * (back to the GM's monster/NPC bucket).
+ */
+export async function assignActor(actorId: string, assignedUserId: string | null): Promise<void> {
+  const userId = await requireUserId();
+  const actor = await prisma.actor.findUnique({ where: { id: actorId } });
+  if (!actor) return;
+  await requireCreator(actor.campaignId, userId);
+  if (assignedUserId) {
+    // Only members of the same campaign can own a character.
+    const member = await prisma.campaignMember.findUnique({
+      where: { campaignId_userId: { campaignId: actor.campaignId, userId: assignedUserId } },
+    });
+    if (!member) throw new Error("Not a member of this campaign");
+  }
+  await prisma.actor.update({ where: { id: actorId }, data: { assignedUserId } });
+  revalidatePath(`/campaigns/${actor.campaignId}`);
+}
+
 /** Creator-only: revoke one key. Other keys keep working. */
 export async function deleteApiKey(keyId: string): Promise<void> {
   const userId = await requireUserId();
