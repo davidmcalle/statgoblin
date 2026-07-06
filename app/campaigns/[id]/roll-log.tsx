@@ -30,6 +30,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { ABILITY_NAMES, SKILL_NAMES } from "@/lib/dnd5e-meta";
+import { DeleteRollButton } from "./delete-roll-button";
 import type { RollLogRow } from "@/lib/stats";
 
 const SKILL_ICONS: Record<string, LucideIcon> = {
@@ -189,10 +190,12 @@ export function RollLog({
   rows,
   colors,
   images,
+  canDelete = false,
 }: {
   rows: RollLogRow[];
   colors: Map<string, string>;
   images: Map<string, string>;
+  canDelete?: boolean;
 }) {
   if (rows.length === 0) {
     return (
@@ -302,6 +305,7 @@ export function RollLog({
                   <div className="w-12 text-right text-xs text-muted-foreground">
                     {r.rolledAt.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}
                   </div>
+                  {canDelete && <DeleteRollButton rollId={r.id} />}
                 </li>
               );
             })}

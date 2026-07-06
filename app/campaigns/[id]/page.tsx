@@ -32,6 +32,7 @@ import {
 } from "@/lib/dnd5e-meta";
 import { Badge } from "@/components/ui/badge";
 import { CampaignSettings } from "./settings";
+import { ClearRolls } from "./clear-rolls";
 import { LiveRefresh } from "./live-refresh";
 import { FilterBar } from "./filter-bar";
 import { CharacterTable, DeathSavesCard, ItemsCard, Section, StatCards } from "./panels";
@@ -271,6 +272,7 @@ export default async function CampaignPage({
           rows={logRows}
           colors={colors}
           images={new Map(actors.filter((a) => a.image).map((a) => [a.name, a.image]))}
+          canDelete={isCreator}
         />
       )}
 
@@ -341,6 +343,16 @@ export default async function CampaignPage({
 
           <DeathSavesCard saves={deathSaves} />
         </>
+      )}
+
+      {isCreator && (
+        <ClearRolls
+          campaignId={id}
+          actors={actors
+            .map((a) => ({ fid: a.foundryActorId, name: a.name }))
+            .sort((x, y) => x.name.localeCompare(y.name))}
+          sessions={sessionList}
+        />
       )}
 
       {isCreator && (

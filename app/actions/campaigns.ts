@@ -123,6 +123,76 @@ export async function setHideDeathSaves(campaignId: string, hide: boolean): Prom
   revalidatePath(`/campaigns/${campaignId}`);
 }
 
+/** Recount actors' live rolls after bulk deletions. */
+async function recountActors(campaignId: string): Promise<void> {
+  await prisma.$executeRaw`
+    UPDATE actors a SET roll_count = COALESCE(r.n, 0)
+    FROM (SELECT actor_fid, COUNT(*) n FROM rolls
+          WHERE campaign_id = ${campaignId}::uuid AND deleted_at IS NULL
+          GROUP BY actor_fid) r
+    WHERE a.campaign_id = ${campaignId}::uuid AND a.foundry_actor_id = r.actor_fid`;
+}
+
+/**
+ * Creator-only: soft-delete one roll's whole message (an attack's damage rolls
+ * go with it). Stamps deletedAt on the raw event — the source of truth — so a
+ * reprocess keeps it deleted; every stat and panel already excludes deleted.
+ */
+export async function deleteRoll(rollId: string): Promise<void> {
+  const userId = await requireUserId();
+  const roll = await prisma.roll.findUnique({ where: { id: rollId } });
+  if (!roll) return;
+  await requireCreator(roll.campaignId, userId);
+  const now = new Date();
+  await prisma.$transaction([
+    prisma.rawEvent.update({ where: { id: roll.rawEventId }, data: { deletedAt: now } }),
+    prisma.roll.updateMany({ where: { rawEventId: roll.rawEventId }, data: { deletedAt: now } }),
+  ]);
+  await recountActors(roll.campaignId);
+  revalidatePath(`/campaigns/${roll.campaignId}`);
+}
+
+/**
+ * Creator-only bulk clear: by character, by session date, or both. At least
+ * one filter required — nuking a whole campaign stays a deliberate,
+ * repeated act rather than one misclick.
+ */
+export async function clearRolls(
+  campaignId: string,
+  filters: { actorFid?: string | null; date?: string | null },
+): Promise<{ cleared: number }> {
+  const userId = await requireUserId();
+  await requireCreator(campaignId, userId);
+  const actorFid = filters.actorFid || undefined;
+  const date = /^\d{4}-\d{2}-\d{2}$/.test(filters.date ?? "") ? filters.date! : undefined;
+  if (!actorFid && !date) throw new Error("Pick a character or a session first");
+
+  const dayStart = date ? new Date(`${date}T00:00:00Z`) : undefined;
+  const targets = await prisma.roll.findMany({
+    where: {
+      campaignId,
+      deletedAt: null,
+      ...(actorFid ? { actorFid } : {}),
+      ...(dayStart
+        ? { rolledAt: { gte: dayStart, lt: new Date(dayStart.getTime() + 86_400_000) } }
+        : {}),
+    },
+    select: { rawEventId: true },
+    distinct: ["rawEventId"],
+  });
+  const ids = targets.map((t) => t.rawEventId);
+  if (ids.length > 0) {
+    const now = new Date();
+    await prisma.$transaction([
+      prisma.rawEvent.updateMany({ where: { id: { in: ids } }, data: { deletedAt: now } }),
+      prisma.roll.updateMany({ where: { rawEventId: { in: ids } }, data: { deletedAt: now } }),
+    ]);
+    await recountActors(campaignId);
+  }
+  revalidatePath(`/campaigns/${campaignId}`);
+  return { cleared: ids.length };
+}
+
 const kindSchema = z.enum(["pc", "npc", "monster"]).nullable();
 
 /** Creator-only: tag an actor's kind (pc/npc/monster), or null for automatic. */
