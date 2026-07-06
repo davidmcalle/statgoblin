@@ -1,3 +1,4 @@
+import type { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/db/prisma";
 import { PARSER_VERSION, parseActor, parseRolls } from "./parse";
 
@@ -23,6 +24,7 @@ export async function deriveRawEvent(event: { id: string }): Promise<void> {
       await tx.roll.createMany({
         data: rolls.map((r) => ({
           ...r,
+          dice: (r.dice ?? undefined) as Prisma.InputJsonValue | undefined,
           campaignId: fresh.campaignId,
           rawEventId: fresh.id,
           messageId: fresh.messageId,

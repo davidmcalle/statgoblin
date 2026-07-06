@@ -97,6 +97,12 @@ model Roll {
 
   formula String?
   total   Float?
+  // Every kept die in the roll: [{ f: faces, r: result }]. Feeds the log view.
+  dice Json?
+  // total minus dice sum — the flat bonus shown as "+2" in the log.
+  modifier Float?
+  // Roll target (save DC / death-save 10) when dnd5e stamped one.
+  dc Int?
   // Raw d20 die result (null for damage/healing/usage).
   d20 Int?
   // -1 disadvantage, 0 normal, 1 advantage.

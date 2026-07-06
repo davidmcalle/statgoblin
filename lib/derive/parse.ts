@@ -2,7 +2,7 @@
 // owns persistence. Bump PARSER_VERSION whenever classification or extraction
 // changes; reprocess rebuilds campaigns whose derive_state lags.
 
-export const PARSER_VERSION = 2;
+export const PARSER_VERSION = 3;
 
 type Term = {
   class?: string;
@@ -19,9 +19,13 @@ type RollJson = {
     advantageMode?: number;
     type?: string;
     isCritical?: boolean;
+    target?: number;
   };
   terms?: Term[];
 };
+
+/** One kept die: faces + result. Compact keys — stored as JSONB per roll. */
+export type DieResult = { f: number; r: number };
 
 type Payload = {
   messageCreatedAt?: string;
@@ -59,6 +63,9 @@ export type ParsedRoll = {
   activityType: string | null;
   formula: string | null;
   total: number | null;
+  dice: DieResult[] | null;
+  modifier: number | null;
+  dc: number | null;
   d20: number | null;
   advantageState: number | null;
   isNat20: boolean;
@@ -127,6 +134,18 @@ function d20Of(roll: RollJson): { result: number | null } {
   return { result: null };
 }
 
+/** All kept (active) dice in the roll, in term order. */
+function diceOf(roll: RollJson): DieResult[] {
+  const out: DieResult[] = [];
+  for (const term of roll.terms ?? []) {
+    if (typeof term.faces !== "number" || !Array.isArray(term.results)) continue;
+    for (const res of term.results) {
+      if (res.active && typeof res.result === "number") out.push({ f: term.faces, r: res.result });
+    }
+  }
+  return out;
+}
+
 const DAMAGE_TYPES = new Set(["damage", "healing"]);
 
 /** All derived rolls for one message payload; empty array for null payload. */
@@ -167,6 +186,9 @@ export function parseRolls(payload: unknown, fallbackTime: Date): ParsedRoll[] {
         rollType: "usage",
         formula: null,
         total: null,
+        dice: null,
+        modifier: null,
+        dc: null,
         d20: null,
         advantageState: null,
         isNat20: false,
@@ -189,12 +211,18 @@ export function parseRolls(payload: unknown, fallbackTime: Date): ParsedRoll[] {
     const isDamage = DAMAGE_TYPES.has(rollType);
     const { result: d20 } = d20Of(roll);
     const isD20Roll = !isDamage && d20 !== null;
+    const dice = diceOf(roll);
+    const total = typeof roll.total === "number" ? roll.total : null;
+    const diceSum = dice.reduce((n, die) => n + die.r, 0);
     return {
       ...base,
       rollIndex,
       rollType,
       formula: roll.formula ?? null,
-      total: typeof roll.total === "number" ? roll.total : null,
+      total,
+      dice: dice.length > 0 ? dice : null,
+      modifier: total !== null && dice.length > 0 ? total - diceSum : null,
+      dc: typeof roll.options?.target === "number" ? roll.options.target : null,
       d20: isD20Roll ? d20 : null,
       advantageState: isD20Roll ? (roll.options?.advantageMode ?? 0) : null,
       isNat20: isD20Roll && d20 === 20,

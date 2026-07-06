@@ -14,8 +14,10 @@ import {
   skillAbilityBuckets,
   type StatFilters,
 } from "@/lib/stats";
-import { actorFidsForKind, sessions } from "@/lib/stats";
+import { actorFidsForKind, rollLog, sessions } from "@/lib/stats";
 import { BubblePackCard } from "./bubble-card";
+import { RollLog } from "./roll-log";
+import { ViewToggle } from "./view-toggle";
 import { effectiveKind } from "@/lib/kind";
 import { campaignMembers } from "@/lib/members";
 import { SKILL_NAMES as SKILL_LABELS } from "@/lib/dnd5e-meta";
@@ -29,7 +31,6 @@ import {
   characterColors,
 } from "@/lib/dnd5e-meta";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { CampaignSettings } from "./settings";
 import { LiveRefresh } from "./live-refresh";
 import { FilterBar } from "./filter-bar";
@@ -46,13 +47,6 @@ import {
 
 export const dynamic = "force-dynamic";
 
-type Payload = {
-  author?: { name?: string };
-  actor?: { name?: string } | null;
-  item?: { name?: string; type?: string } | null;
-  flavor?: string;
-  rolls?: { formula?: string; total?: number }[];
-};
 
 const FALLBACK = "#6b7280";
 
@@ -68,6 +62,7 @@ export default async function CampaignPage({
     kind?: string;
     session?: string;
     by?: string;
+    view?: string;
   }>;
 }) {
   const [{ id }, sp] = await Promise.all([params, searchParams]);
@@ -84,6 +79,7 @@ export default async function CampaignPage({
   const campaign = member.campaign;
   const isCreator = campaign.creatorId === userId;
 
+  const view = sp.view === "log" ? ("log" as const) : ("charts" as const);
   const days = sp.days ? Number(sp.days) : undefined;
   const kind = ["pc", "npc", "monster"].includes(sp.kind ?? "") ? sp.kind : undefined;
   // Grouping axis: metrics keyed by character (actor) or by player (author).
@@ -98,7 +94,6 @@ export default async function CampaignPage({
   };
 
   const [
-    events,
     stats,
     histogram,
     types,
@@ -112,11 +107,6 @@ export default async function CampaignPage({
     actors,
     members,
   ] = await Promise.all([
-    prisma.rawEvent.findMany({
-      where: { campaignId: id, deletedAt: null },
-      orderBy: { updatedAt: "desc" },
-      take: 30,
-    }),
     actorStats(id, filters, by),
     d20Histogram(id, filters, by),
     rollTypeCounts(id, filters),
@@ -131,6 +121,7 @@ export default async function CampaignPage({
     campaignMembers(id),
   ]);
   const sessionList = await sessions(id);
+  const logRows = view === "log" ? await rollLog(id, filters) : [];
 
   // Subject = whatever the grouping axis produces (character or player names).
   const colors = characterColors([...options.actors, ...stats.map((s) => s.actorName)]);
@@ -256,21 +247,28 @@ export default async function CampaignPage({
         </div>
       </div>
 
-      <FilterBar
-        pcActors={actors
-          .filter((a) => effectiveKind(a) === "pc")
-          .map((a) => a.name)
-          .sort()}
-        monsterActors={actors
-          .filter((a) => effectiveKind(a) !== "pc")
-          .map((a) => a.name)
-          .sort()}
-        types={options.types}
-        sessions={sessionList}
-        current={sp}
-      />
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <FilterBar
+          pcActors={actors
+            .filter((a) => effectiveKind(a) === "pc")
+            .map((a) => a.name)
+            .sort()}
+          monsterActors={actors
+            .filter((a) => effectiveKind(a) !== "pc")
+            .map((a) => a.name)
+            .sort()}
+          types={options.types}
+          sessions={sessionList}
+          current={sp}
+        />
+        <ViewToggle view={view} />
+      </div>
 
-      <StatCards totals={totals} />
+      {view === "log" && <RollLog rows={logRows} colors={colors} />}
+
+      {view === "charts" && (
+        <>
+          <StatCards totals={totals} />
 
       {(visiblePcCards.length > 0 || (isCreator && visibleMonsterCards.length > 0)) && (
         <Section title="The party" description="Each character's story so far">
@@ -333,7 +331,9 @@ export default async function CampaignPage({
         </div>
       </Section>
 
-      <DeathSavesCard saves={deathSaves} />
+          <DeathSavesCard saves={deathSaves} />
+        </>
+      )}
 
       {isCreator && (
         <CampaignSettings
@@ -347,48 +347,6 @@ export default async function CampaignPage({
           }))}
         />
       )}
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Latest rolls</CardTitle>
-          <CardDescription>Raw feed — most recent first</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <ul className="space-y-2 font-mono text-sm">
-            {events.length === 0 && (
-              <p className="font-sans text-muted-foreground">
-                Nothing yet — point the Foundry module at this campaign and roll.
-              </p>
-            )}
-            {events.map((e) => {
-              const p = (e.payload ?? {}) as Payload;
-              const roll = p.rolls?.[0];
-              return (
-                <li key={e.id} className="rounded-md border p-3">
-                  <div className="flex flex-wrap gap-x-3 gap-y-1">
-                    <span className="font-bold">{p.actor?.name ?? p.author?.name ?? "—"}</span>
-                    <span>{p.item?.name ?? p.flavor ?? ""}</span>
-                    {roll && (
-                      <span>
-                        {roll.formula} = <span className="font-bold">{roll.total}</span>
-                      </span>
-                    )}
-                    <span className="ml-auto text-muted-foreground">
-                      {e.updatedAt.toISOString().replace("T", " ").slice(0, 19)}
-                    </span>
-                  </div>
-                  <details className="mt-1">
-                    <summary className="cursor-pointer text-muted-foreground">payload</summary>
-                    <pre className="mt-1 overflow-x-auto rounded bg-muted p-2 text-xs">
-                      {JSON.stringify(e.payload, null, 2)}
-                    </pre>
-                  </details>
-                </li>
-              );
-            })}
-          </ul>
-        </CardContent>
-      </Card>
     </main>
   );
 }

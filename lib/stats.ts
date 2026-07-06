@@ -462,6 +462,60 @@ export async function myCharacters(userId: string): Promise<MyCharacterRow[]> {
   }));
 }
 
+export type RollLogRow = {
+  id: string;
+  rolledAt: Date;
+  rollType: string;
+  actorName: string | null;
+  authorName: string | null;
+  itemName: string | null;
+  skill: string | null;
+  ability: string | null;
+  damageType: string | null;
+  formula: string | null;
+  total: number | null;
+  dice: { f: number; r: number }[];
+  modifier: number | null;
+  dc: number | null;
+  isNat20: boolean;
+  isNat1: boolean;
+};
+
+/** Newest-first roll stream for the log view. */
+export async function rollLog(
+  campaignId: string,
+  f: StatFilters = {},
+  take = 150,
+): Promise<RollLogRow[]> {
+  const rows = await prisma.roll.findMany({
+    where: whereFilters(campaignId, f),
+    orderBy: [{ rolledAt: "desc" }, { rollIndex: "asc" }],
+    take,
+    select: {
+      id: true,
+      rolledAt: true,
+      rollType: true,
+      actorName: true,
+      authorName: true,
+      itemName: true,
+      skill: true,
+      ability: true,
+      damageType: true,
+      formula: true,
+      total: true,
+      dice: true,
+      modifier: true,
+      dc: true,
+      isNat20: true,
+      isNat1: true,
+    },
+  });
+  return rows.map((r) => ({
+    ...r,
+    dice: Array.isArray(r.dice) ? (r.dice as { f: number; r: number }[]) : [],
+  }));
+}
+
 /** Distinct values for the filter bar — always unfiltered. */
 export async function filterOptions(campaignId: string) {
   const [actors, types] = await Promise.all([
