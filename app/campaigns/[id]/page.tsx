@@ -246,7 +246,19 @@ export default async function CampaignPage({
         </div>
       </div>
 
-      <FilterBar actors={options.actors} types={options.types} sessions={sessionList} current={sp} />
+      <FilterBar
+        pcActors={actors
+          .filter((a) => effectiveKind(a) === "pc")
+          .map((a) => a.name)
+          .sort()}
+        monsterActors={actors
+          .filter((a) => effectiveKind(a) !== "pc")
+          .map((a) => a.name)
+          .sort()}
+        types={options.types}
+        sessions={sessionList}
+        current={sp}
+      />
 
       <StatCards totals={totals} />
 

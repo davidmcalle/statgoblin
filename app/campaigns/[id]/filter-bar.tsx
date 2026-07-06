@@ -34,12 +34,14 @@ const BY = [
 // every panel below reflects the selection. Base UI's Select renders labels
 // from the `items` map passed to the root.
 export function FilterBar({
-  actors,
+  pcActors,
+  monsterActors,
   types,
   sessions,
   current,
 }: {
-  actors: string[];
+  pcActors: string[];
+  monsterActors: string[];
   types: string[];
   sessions: { n: number; date: string }[];
   current: {
@@ -59,6 +61,8 @@ export function FilterBar({
     const params = new URLSearchParams(searchParams);
     if (value === ALL) params.delete(key);
     else params.set(key, value);
+    // Changing kind invalidates a name picked from the other bucket's list.
+    if (key === "kind") params.delete("actor");
     router.replace(`${pathname}?${params.toString()}`, { scroll: false });
   };
 
@@ -81,10 +85,17 @@ export function FilterBar({
       })),
   ];
 
-  const actorItems = [
+  const pcItems = [
     { value: ALL, label: "All characters" },
-    ...actors.map((a) => ({ value: a, label: a })),
+    ...pcActors.map((a) => ({ value: a, label: a })),
   ];
+  const monsterItems = [
+    { value: ALL, label: "All monsters & NPCs" },
+    ...monsterActors.map((a) => ({ value: a, label: a })),
+  ];
+  // Kind narrows which name dropdowns even appear.
+  const showPcSelect = !current.kind || current.kind === "pc";
+  const showMonsterSelect = !current.kind || current.kind !== "pc";
   const typeItems = [
     { value: ALL, label: "All roll types" },
     ...types.map((t) => ({ value: t, label: t })),
@@ -93,22 +104,43 @@ export function FilterBar({
 
   return (
     <div className="flex flex-wrap items-center gap-2">
-      <Select
-        items={actorItems}
-        value={current.actor ?? ALL}
-        onValueChange={(v) => setParam("actor", v ?? ALL)}
-      >
-        <SelectTrigger className="w-44">
-          <SelectValue />
-        </SelectTrigger>
-        <SelectContent>
-          {actorItems.map((i) => (
-            <SelectItem key={i.value} value={i.value}>
-              {i.label}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
+      {showPcSelect && (
+        <Select
+          items={pcItems}
+          value={pcActors.includes(current.actor ?? "") ? current.actor! : ALL}
+          onValueChange={(v) => setParam("actor", v ?? ALL)}
+        >
+          <SelectTrigger className="w-44">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {pcItems.map((i) => (
+              <SelectItem key={i.value} value={i.value}>
+                {i.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      )}
+
+      {showMonsterSelect && (
+        <Select
+          items={monsterItems}
+          value={monsterActors.includes(current.actor ?? "") ? current.actor! : ALL}
+          onValueChange={(v) => setParam("actor", v ?? ALL)}
+        >
+          <SelectTrigger className="w-48">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {monsterItems.map((i) => (
+              <SelectItem key={i.value} value={i.value}>
+                {i.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      )}
 
       <Select
         items={kindItems}
