@@ -26,6 +26,17 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "StatGoblin",
   description: "Your table's rolls, collected and charted.",
+  manifest: "/favicon_io/site.webmanifest",
+  icons: {
+    // Black glyph for light tabs, white variant for dark ones.
+    icon: [
+      { url: "/favicon_io/favicon-32x32.png", sizes: "32x32", media: "(prefers-color-scheme: light)" },
+      { url: "/favicon_io/favicon-16x16.png", sizes: "16x16", media: "(prefers-color-scheme: light)" },
+      { url: "/favicon_io/favicon-32x32-dark.png", sizes: "32x32", media: "(prefers-color-scheme: dark)" },
+      { url: "/favicon_io/favicon-16x16-dark.png", sizes: "16x16", media: "(prefers-color-scheme: dark)" },
+    ],
+    apple: "/favicon_io/apple-touch-icon.png",
+  },
 };
 
 export default async function RootLayout({
