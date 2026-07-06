@@ -1,5 +1,6 @@
 "use client";
 
+import { Input } from "@/components/ui/input";
 import { useEffect, useState, useTransition } from "react";
 import {
   createApiKey,
@@ -48,7 +49,7 @@ export function CampaignSettings({
   const inviteLink = `${origin}/join/${campaign.inviteCode}`;
 
   return (
-    <details className="rounded-lg border border-gray-200 p-4 dark:border-gray-800">
+    <details className="rounded-lg border border-border p-4 border-border">
       <summary className="cursor-pointer font-semibold">Campaign settings (GM only)</summary>
 
       <form
@@ -63,26 +64,26 @@ export function CampaignSettings({
       >
         <label className="block">
           <span className="text-sm font-semibold">Name</span>
-          <input
+          <Input
             name="name"
             defaultValue={campaign.name}
             required
             maxLength={80}
-            className="mt-1 w-full rounded border border-gray-300 px-3 py-2 dark:border-gray-700 dark:bg-gray-900"
+            className="mt-1 w-full"
           />
         </label>
         <label className="block">
           <span className="text-sm font-semibold">Image URL</span>
-          <input
+          <Input
             name="image"
             defaultValue={campaign.image}
             placeholder="https://…"
-            className="mt-1 w-full rounded border border-gray-300 px-3 py-2 dark:border-gray-700 dark:bg-gray-900"
+            className="mt-1 w-full"
           />
         </label>
         <button
           disabled={pending}
-          className="rounded-md bg-gray-900 px-4 py-2 text-white disabled:opacity-50 dark:bg-white dark:text-gray-900"
+          className="rounded-md bg-primary px-4 py-2 text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
         >
           {pending ? "Saving…" : saved ? "Saved ✓" : "Save"}
         </button>
@@ -107,14 +108,14 @@ export function CampaignSettings({
         </div>
         <div>
           <span className="font-semibold">Invite link</span>
-          <p className="flex items-start gap-2 rounded bg-gray-100 p-2 font-mono text-xs dark:bg-gray-900">
+          <p className="flex items-start gap-2 rounded bg-muted p-2 font-mono text-xs bg-muted">
             <span className="break-all">{inviteLink || `/join/${campaign.inviteCode}`}</span>
             <CopyButton value={inviteLink || `/join/${campaign.inviteCode}`} label="Copy invite link" />
           </p>
         </div>
         <div>
           <span className="font-semibold">Foundry: Campaign ID</span>
-          <p className="flex items-start gap-2 rounded bg-gray-100 p-2 font-mono text-xs dark:bg-gray-900">
+          <p className="flex items-start gap-2 rounded bg-muted p-2 font-mono text-xs bg-muted">
             <span className="break-all">{campaign.id}</span>
             <CopyButton value={campaign.id} label="Copy campaign ID" />
           </p>
@@ -122,13 +123,13 @@ export function CampaignSettings({
 
         <div>
           <span className="font-semibold">API keys</span>
-          <p className="mb-2 text-gray-500">
+          <p className="mb-2 text-muted-foreground">
             Any live key authorizes ingest for this campaign. Plaintext is shown once at creation.
           </p>
           {freshKey && (
             <div className="mb-3 rounded border border-green-300 p-2 dark:border-green-800">
               <p className="mb-1 font-semibold">New key — copy it now, it won&apos;t be shown again:</p>
-              <p className="flex items-start gap-2 rounded bg-gray-100 p-2 font-mono text-xs dark:bg-gray-900">
+              <p className="flex items-start gap-2 rounded bg-muted p-2 font-mono text-xs bg-muted">
                 <span className="break-all">{freshKey}</span>
                 <CopyButton value={freshKey} label="Copy API key" />
               </p>
@@ -136,16 +137,16 @@ export function CampaignSettings({
           )}
           <ul className="mb-3 space-y-1">
             {apiKeys.length === 0 && (
-              <li className="text-gray-500">No keys — Foundry can&apos;t send rolls until you create one.</li>
+              <li className="text-muted-foreground">No keys — Foundry can&apos;t send rolls until you create one.</li>
             )}
             {apiKeys.map((k) => (
               <li
                 key={k.id}
-                className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded border border-gray-200 px-3 py-2 dark:border-gray-800"
+                className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded border border-border px-3 py-2 border-border"
               >
                 <span className="font-semibold">{k.name}</span>
-                <span className="font-mono text-xs text-gray-500">{k.keyPrefix}</span>
-                <span className="text-xs text-gray-500">
+                <span className="font-mono text-xs text-muted-foreground">{k.keyPrefix}</span>
+                <span className="text-xs text-muted-foreground">
                   created {k.createdAt.slice(0, 10)} · last used{" "}
                   {k.lastUsedAt ? k.lastUsedAt.slice(0, 16).replace("T", " ") : "never"}
                 </span>
@@ -169,18 +170,18 @@ export function CampaignSettings({
               });
             }}
           >
-            <input
+            <Input
               name="name"
               value={keyName}
               onChange={(e) => setKeyName(e.target.value)}
               required
               maxLength={80}
               placeholder="Key name (e.g. Foundry)"
-              className="flex-1 rounded border border-gray-300 px-3 py-1.5 dark:border-gray-700 dark:bg-gray-900"
+              className="flex-1"
             />
             <button
               disabled={pending}
-              className="rounded-md border border-gray-300 px-3 py-1.5 disabled:opacity-50 dark:border-gray-700"
+              className="rounded-md border border-input px-3 py-1.5 disabled:opacity-50 border-input"
             >
               Create key
             </button>

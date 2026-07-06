@@ -1,5 +1,6 @@
 "use client";
 
+import { Input } from "@/components/ui/input";
 import { useState, useTransition } from "react";
 import { createCampaign } from "@/app/actions/campaigns";
 import { CopyButton } from "./copy-button";
@@ -15,21 +16,21 @@ export function CreateCampaignForm() {
     return (
       <div className="rounded-lg border border-green-300 p-4 dark:border-green-800">
         <h2 className="mb-2 font-semibold">Campaign created 🎉</h2>
-        <p className="mb-2 text-sm text-gray-600 dark:text-gray-400">
+        <p className="mb-2 text-sm text-muted-foreground">
           Copy these into Foundry (Configure Settings → StatGoblin). The API key is shown{" "}
           <strong>only once</strong>.
         </p>
         <dl className="space-y-2 font-mono text-xs">
           <div>
             <dt className="font-sans font-semibold">Campaign ID</dt>
-            <dd className="flex items-start gap-2 rounded bg-gray-100 p-2 dark:bg-gray-900">
+            <dd className="flex items-start gap-2 rounded bg-muted p-2 bg-muted">
               <span className="break-all">{created.campaignId}</span>
               <CopyButton value={created.campaignId} label="Copy campaign ID" />
             </dd>
           </div>
           <div>
             <dt className="font-sans font-semibold">Admin API Key</dt>
-            <dd className="flex items-start gap-2 rounded bg-gray-100 p-2 dark:bg-gray-900">
+            <dd className="flex items-start gap-2 rounded bg-muted p-2 bg-muted">
               <span className="break-all">{created.ingestKey}</span>
               <CopyButton value={created.ingestKey} label="Copy API key" />
             </dd>
@@ -44,7 +45,7 @@ export function CreateCampaignForm() {
 
   return (
     <form
-      className="rounded-lg border border-gray-200 p-4 dark:border-gray-800"
+      className="rounded-lg border border-border p-4 border-border"
       action={(formData) => {
         setError(null);
         startTransition(async () => {
@@ -57,17 +58,17 @@ export function CreateCampaignForm() {
       }}
     >
       <h2 className="mb-2 font-semibold">Create a campaign</h2>
-      <input
+      <Input
         name="name"
         required
         maxLength={80}
         placeholder="Campaign name"
-        className="mb-3 w-full rounded border border-gray-300 px-3 py-2 dark:border-gray-700 dark:bg-gray-900"
+        className="mb-3 w-full"
       />
       {error && <p className="mb-2 text-sm text-red-600">{error}</p>}
       <button
         disabled={pending}
-        className="rounded-md bg-gray-900 px-4 py-2 text-white disabled:opacity-50 dark:bg-white dark:text-gray-900"
+        className="rounded-md bg-primary px-4 py-2 text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
       >
         {pending ? "Creating…" : "Create"}
       </button>

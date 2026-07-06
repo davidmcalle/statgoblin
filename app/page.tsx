@@ -12,18 +12,18 @@ export default async function HomePage() {
     return (
       <main className="flex flex-1 flex-col items-center justify-center gap-6 p-8 text-center">
         <h1 className="text-4xl font-bold">Your table rolls a lot of dice.</h1>
-        <p className="max-w-md text-gray-600 dark:text-gray-400">
+        <p className="max-w-md text-muted-foreground">
           StatGoblin collects every roll from your Foundry game — the nat 20s, the clutch saves,
           the cursed luck. Sign in to start a campaign or join your table.
         </p>
         <div className="flex gap-3">
           <SignInButton>
-            <button className="rounded-md bg-gray-900 px-4 py-2 text-white dark:bg-white dark:text-gray-900">
+            <button className="rounded-md bg-primary px-4 py-2 text-primary-foreground hover:bg-primary/90">
               Sign in
             </button>
           </SignInButton>
           <SignUpButton>
-            <button className="rounded-md border border-gray-300 px-4 py-2 dark:border-gray-700">
+            <button className="rounded-md border border-input px-4 py-2 border-input">
               Sign up
             </button>
           </SignUpButton>
@@ -42,7 +42,7 @@ export default async function HomePage() {
     <main className="mx-auto w-full max-w-3xl flex-1 p-6">
       <h1 className="mb-6 text-2xl font-bold">Your campaigns</h1>
       {memberships.length === 0 && (
-        <p className="mb-6 text-gray-600 dark:text-gray-400">
+        <p className="mb-6 text-muted-foreground">
           No campaigns yet — create one, or join with an invite code.
         </p>
       )}
@@ -51,19 +51,19 @@ export default async function HomePage() {
           <li key={campaign.id}>
             <Link
               href={`/campaigns/${campaign.id}`}
-              className="flex items-center gap-4 rounded-lg border border-gray-200 p-4 hover:bg-gray-50 dark:border-gray-800 dark:hover:bg-gray-900"
+              className="flex items-center gap-4 rounded-lg border border-border p-4 hover:bg-muted/50"
             >
               {campaign.image ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img src={campaign.image} alt="" className="h-12 w-12 rounded object-cover" />
               ) : (
-                <span className="flex h-12 w-12 items-center justify-center rounded bg-gray-100 text-2xl dark:bg-gray-800">
+                <span className="flex h-12 w-12 items-center justify-center rounded bg-muted text-2xl bg-muted">
                   🎲
                 </span>
               )}
               <span className="flex-1">
                 <span className="block font-semibold">{campaign.name}</span>
-                <span className="text-sm text-gray-500">
+                <span className="text-sm text-muted-foreground">
                   {role === "gm" ? "GM" : "Player"} · {campaign._count.members} members ·{" "}
                   {campaign._count.events} rolls
                 </span>

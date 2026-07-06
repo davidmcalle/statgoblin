@@ -1,5 +1,6 @@
 "use client";
 
+import { Input } from "@/components/ui/input";
 import { useMemo, useState } from "react";
 import { CharacterCard, type CharacterCardData } from "./character-cards";
 import type { MemberInfo } from "@/lib/members";
@@ -50,11 +51,11 @@ export function MonsterBrowser({
         <h3 className="text-sm font-semibold text-muted-foreground">
           Monsters &amp; NPCs <span className="font-normal">(GM only)</span>
         </h3>
-        <input
+        <Input
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder="Search monsters…"
-          className="ml-auto h-8 w-44 rounded-lg border border-input bg-transparent px-2.5 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+          className="ml-auto w-44 h-8"
         />
         <Select items={SORTS} value={sort} onValueChange={(v) => setSort(v ?? "cr")}>
           <SelectTrigger className="w-36" size="sm">
