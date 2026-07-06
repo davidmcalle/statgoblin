@@ -91,6 +91,8 @@ export default async function CampaignPage({
     session: /^\d{4}-\d{2}-\d{2}$/.test(sp.session ?? "") ? sp.session : undefined,
     // Kind is an actors-table property (override + auto rule); resolve to ids.
     actorFids: kind ? await actorFidsForKind(id, kind) : undefined,
+    // Only the GM sees death saves inside the hiding window.
+    includeHidden: isCreator,
   };
 
   const [

@@ -95,6 +95,34 @@ export async function assignActor(actorId: string, assignedUserId: string | null
   revalidatePath(`/campaigns/${actor.campaignId}`);
 }
 
+/**
+ * Creator-only: hide (or reveal) death saves. Enabling opens a new hiding
+ * window — death saves rolled from now on stay GM-only. Disabling reveals the
+ * currently hidden ones permanently; re-enabling later can't re-hide them.
+ */
+export async function setHideDeathSaves(campaignId: string, hide: boolean): Promise<void> {
+  const userId = await requireUserId();
+  await requireCreator(campaignId, userId);
+  if (hide) {
+    await prisma.campaign.update({
+      where: { id: campaignId },
+      data: { hideDeathSaves: true, hideDeathSavesSince: new Date() },
+    });
+  } else {
+    await prisma.$transaction([
+      prisma.campaign.update({
+        where: { id: campaignId },
+        data: { hideDeathSaves: false, hideDeathSavesSince: null },
+      }),
+      prisma.roll.updateMany({
+        where: { campaignId, rollType: "death", isHidden: true },
+        data: { isHidden: false },
+      }),
+    ]);
+  }
+  revalidatePath(`/campaigns/${campaignId}`);
+}
+
 const kindSchema = z.enum(["pc", "npc", "monster"]).nullable();
 
 /** Creator-only: tag an actor's kind (pc/npc/monster), or null for automatic. */

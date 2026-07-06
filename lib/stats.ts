@@ -18,6 +18,8 @@ export type StatFilters = {
    * so callers resolve it to ids via actorFidsForKind before querying rolls.
    */
   actorFids?: string[];
+  /** GM view: include death saves currently hidden from players. */
+  includeHidden?: boolean;
 };
 
 /**
@@ -49,6 +51,7 @@ function sqlFilters(campaignId: string, f: StatFilters): Prisma.Sql {
     ${f.actor ? Prisma.sql`AND actor_name = ${f.actor}` : Prisma.empty}
     ${f.type ? Prisma.sql`AND roll_type = ${f.type}` : Prisma.empty}
     ${f.actorFids ? Prisma.sql`AND actor_fid = ANY(${f.actorFids})` : Prisma.empty}
+    ${f.includeHidden ? Prisma.empty : Prisma.sql`AND is_hidden = false`}
     ${f.session ? Prisma.sql`AND rolled_at::date = ${f.session}::date` : Prisma.empty}
     ${f.days ? Prisma.sql`AND rolled_at > now() - make_interval(days => ${f.days})` : Prisma.empty}`;
 }
@@ -61,6 +64,7 @@ function whereFilters(campaignId: string, f: StatFilters) {
     ...(f.actor ? { actorName: f.actor } : {}),
     ...(f.type ? { rollType: f.type } : {}),
     ...(f.actorFids ? { actorFid: { in: f.actorFids } } : {}),
+    ...(f.includeHidden ? {} : { isHidden: false }),
     ...(sessionStart
       ? { rolledAt: { gte: sessionStart, lt: new Date(sessionStart.getTime() + 86_400_000) } }
       : f.days
@@ -479,6 +483,7 @@ export type RollLogRow = {
   modifier: number | null;
   dc: number | null;
   isNat20: boolean;
+  isHidden: boolean;
   isNat1: boolean;
 };
 
@@ -509,6 +514,7 @@ export async function rollLog(
       modifier: true,
       dc: true,
       isNat20: true,
+      isHidden: true,
       isNat1: true,
     },
   });

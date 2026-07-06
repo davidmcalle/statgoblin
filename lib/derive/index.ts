@@ -19,12 +19,24 @@ export async function deriveRawEvent(event: { id: string }): Promise<void> {
     const rolls = parseRolls(fresh.payload, fresh.firstSeenAt);
     const actor = parseActor(fresh.payload);
 
+    // Death saves rolled inside the campaign's current hiding window stay
+    // hidden from players. Window-based (not flag-based) so a reprocess can
+    // never re-hide saves the GM already revealed.
+    const campaign = await tx.campaign.findUnique({
+      where: { id: fresh.campaignId },
+      select: { hideDeathSaves: true, hideDeathSavesSince: true },
+    });
+    const hiddenFrom = campaign?.hideDeathSaves
+      ? (campaign.hideDeathSavesSince ?? new Date(0))
+      : null;
+
     await tx.roll.deleteMany({ where: { rawEventId: fresh.id } });
     if (rolls.length > 0) {
       await tx.roll.createMany({
         data: rolls.map((r) => ({
           ...r,
           dice: (r.dice ?? undefined) as Prisma.InputJsonValue | undefined,
+          isHidden: r.rollType === "death" && hiddenFrom !== null && r.rolledAt >= hiddenFrom,
           campaignId: fresh.campaignId,
           rawEventId: fresh.id,
           messageId: fresh.messageId,

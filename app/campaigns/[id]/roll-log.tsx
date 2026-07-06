@@ -1,6 +1,7 @@
 import {
   Activity,
   BookOpen,
+  EyeOff,
   Compass,
   Cross,
   Dices,
@@ -264,6 +265,11 @@ export function RollLog({
                     <div className="mt-1 flex items-center gap-1.5 text-sm text-muted-foreground">
                       <Icon size={15} aria-hidden style={{ color: accent }} />
                       <span>{describe(r)}</span>
+                      {r.isHidden && (
+                        <span className="ml-1 inline-flex items-center gap-1 rounded bg-muted px-1.5 py-0.5 text-[10px] font-semibold">
+                          <EyeOff size={11} /> hidden from players
+                        </span>
+                      )}
                     </div>
                   </div>
                   <div className="flex items-center gap-1.5">

@@ -1,10 +1,22 @@
 "use client";
 
 import { useEffect, useState, useTransition } from "react";
-import { createApiKey, deleteApiKey, updateCampaign } from "@/app/actions/campaigns";
+import {
+  createApiKey,
+  deleteApiKey,
+  setHideDeathSaves,
+  updateCampaign,
+} from "@/app/actions/campaigns";
 import { CopyButton } from "@/app/_components/copy-button";
+import { Switch } from "@/components/ui/switch";
 
-type Campaign = { id: string; name: string; image: string; inviteCode: string };
+type Campaign = {
+  id: string;
+  name: string;
+  image: string;
+  inviteCode: string;
+  hideDeathSaves: boolean;
+};
 
 export type ApiKeyRow = {
   id: string;
@@ -77,6 +89,22 @@ export function CampaignSettings({
       </form>
 
       <div className="mt-6 space-y-4 text-sm">
+        <div className="flex items-center justify-between gap-4 rounded-md border p-3">
+          <div>
+            <span className="font-semibold">Hide death saves</span>
+            <p className="text-muted-foreground">
+              While on, new death saves are visible only to you. Turning it off reveals the
+              currently hidden ones permanently — re-enabling won&apos;t re-hide them.
+            </p>
+          </div>
+          <Switch
+            checked={campaign.hideDeathSaves}
+            disabled={pending}
+            onCheckedChange={(checked) =>
+              startTransition(() => setHideDeathSaves(campaign.id, !!checked))
+            }
+          />
+        </div>
         <div>
           <span className="font-semibold">Invite link</span>
           <p className="flex items-start gap-2 rounded bg-gray-100 p-2 font-mono text-xs dark:bg-gray-900">

@@ -22,6 +22,11 @@ model Campaign {
   creatorId String @map("creator_id")
   // Shareable code embedded in invite links; joining adds a member row.
   inviteCode String   @unique @map("invite_code")
+  // GM switch: death saves rolled while enabled stay hidden from players.
+  // Disabling reveals them permanently — `since` marks the current hiding
+  // window, so reprocessing can never re-hide previously revealed saves.
+  hideDeathSaves      Boolean   @default(false) @map("hide_death_saves")
+  hideDeathSavesSince DateTime? @map("hide_death_saves_since") @db.Timestamptz(6)
   createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
 
   members CampaignMember[]
@@ -121,6 +126,10 @@ model Roll {
   ability        String?
   skill          String?
   profMultiplier Float?  @map("prof_multiplier")
+
+  // GM-hidden (death saves rolled during a hiding window). Player-facing
+  // queries exclude these until the GM reveals them.
+  isHidden Boolean @default(false) @map("is_hidden")
 
   rolledAt  DateTime  @map("rolled_at") @db.Timestamptz(6)
   deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
