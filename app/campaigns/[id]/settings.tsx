@@ -5,6 +5,7 @@ import { useEffect, useState, useTransition } from "react";
 import {
   createApiKey,
   deleteApiKey,
+  deleteCampaign,
   removeMember,
   setHideDeathSaves,
   updateCampaign,
@@ -49,6 +50,7 @@ export function CampaignSettings({
   const [keyName, setKeyName] = useState("");
   const [saved, setSaved] = useState(false);
   const [removing, setRemoving] = useState<MemberInfo | null>(null);
+  const [deletingCampaign, setDeletingCampaign] = useState(false);
 
   // Origin only exists in the browser; render the relative link during SSR and
   // upgrade after mount so server and client HTML match.
@@ -255,6 +257,30 @@ export function CampaignSettings({
               Create key
             </button>
           </form>
+        </div>
+
+        <div className="rounded-md border border-destructive/40 p-3">
+          <span className="font-semibold">Delete campaign</span>
+          <p className="mb-2 text-muted-foreground">
+            Permanently removes the campaign — every roll, member, character and API key. There is
+            no undo.
+          </p>
+          <button
+            disabled={pending}
+            onClick={() => setDeletingCampaign(true)}
+            className="rounded border border-red-300 px-3 py-1.5 text-red-600 disabled:opacity-50 dark:border-red-800"
+          >
+            Delete this campaign
+          </button>
+          <ConfirmDialog
+            open={deletingCampaign}
+            onOpenChange={setDeletingCampaign}
+            title={`Delete “${campaign.name}”?`}
+            description="Everything goes — rolls, members, characters, API keys. Foundry will get 401s until you point it at another campaign. This cannot be undone."
+            confirmLabel="Delete campaign"
+            pending={pending}
+            onConfirm={() => startTransition(() => deleteCampaign(campaign.id))}
+          />
         </div>
       </div>
     </details>

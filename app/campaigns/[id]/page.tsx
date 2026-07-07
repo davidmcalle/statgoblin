@@ -260,6 +260,15 @@ export default async function CampaignPage({
             )}
           </div>
         </div>
+        {isCreator && (
+          <span className="ml-auto self-start">
+            <SendSummary
+              campaignId={id}
+              sessions={sessionList}
+              webhookConfigured={!!campaign.discordWebhookUrl}
+            />
+          </span>
+        )}
       </div>
 
       {/* Phones: view toggle first, filters collapse beneath it. */}
@@ -360,14 +369,6 @@ export default async function CampaignPage({
 
           <DeathSavesCard saves={deathSaves} />
         </>
-      )}
-
-      {isCreator && (
-        <SendSummary
-          campaignId={id}
-          sessions={sessionList}
-          webhookConfigured={!!campaign.discordWebhookUrl}
-        />
       )}
 
       <ClearRolls

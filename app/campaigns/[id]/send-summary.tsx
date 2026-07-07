@@ -43,9 +43,15 @@ export function SendSummary({
 
   return (
     <>
-      <Button variant="outline" size="sm" onClick={() => { setStatus(null); setOpen(true); }}>
-        <Send size={14} />
-        Send summary to Discord
+      <Button
+        variant="outline"
+        size="icon"
+        className="rounded-md"
+        title="Send session summary to Discord"
+        aria-label="Send session summary to Discord"
+        onClick={() => { setStatus(null); setOpen(true); }}
+      >
+        <Send size={16} />
       </Button>
 
       <Dialog open={open} onOpenChange={setOpen}>

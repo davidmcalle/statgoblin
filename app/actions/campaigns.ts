@@ -325,6 +325,23 @@ export async function removeMember(campaignId: string, memberUserId: string): Pr
   revalidatePath(`/campaigns/${campaignId}`);
 }
 
+/**
+ * Creator-only: hard-delete the whole campaign — members, keys, raw events,
+ * rolls (FK cascades), plus actors and derive state (no FK relation). Gone
+ * means gone; the UI confirms loudly before calling this.
+ */
+export async function deleteCampaign(campaignId: string): Promise<void> {
+  const userId = await requireUserId();
+  await requireCreator(campaignId, userId);
+  await prisma.$transaction([
+    prisma.actor.deleteMany({ where: { campaignId } }),
+    prisma.deriveState.deleteMany({ where: { campaignId } }),
+    prisma.campaign.delete({ where: { id: campaignId } }),
+  ]);
+  revalidatePath("/");
+  redirect("/");
+}
+
 /** Creator-only: revoke one key. Other keys keep working. */
 export async function deleteApiKey(keyId: string): Promise<void> {
   const userId = await requireUserId();
