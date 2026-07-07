@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import {
   UAT_ACTORS,
   UAT_MEMBERS,
+  uatAbilityMatrix,
   uatActorStats,
   uatActorTops,
   uatDeathSaves,
@@ -33,9 +34,9 @@ import {
 import {
   D20HistogramCard,
   DicePactsCard,
+  RadarCard,
   RollTypesCard,
   SkillBarsCard,
-  SkillRadarCard,
   type NamedCount,
   type RadarRow,
 } from "@/app/campaigns/[id]/dashboard-charts";
@@ -90,6 +91,7 @@ export default async function UatPage({
   const totals = uatTotals(rolls);
   const skillBuckets = uatSkillBuckets(rolls);
   const skillMatrix = uatSkillMatrix(rolls, by);
+  const abilityMatrix = uatAbilityMatrix(rolls, by);
   const options = uatFilterOptions();
   const items = uatItemUsage(rolls);
   const tops = uatActorTops(rolls, by);
@@ -158,8 +160,17 @@ export default async function UatPage({
     color: colors.get(a.name) ?? FALLBACK,
   }));
   const radarData: RadarRow[] = skillMatrix.skills.map((skill, i) => ({
-    skill: SKILL_NAMES[skill] ?? skill,
+    axis: SKILL_NAMES[skill] ?? skill,
     ...Object.fromEntries(skillMatrix.actors.map((a) => [a.name, a.counts[i]])),
+  }));
+
+  const abilityRadarSeries = abilityMatrix.actors.map((a) => ({
+    name: a.name,
+    color: colors.get(a.name) ?? FALLBACK,
+  }));
+  const abilityRadarData: RadarRow[] = abilityMatrix.skills.map((ability, i) => ({
+    axis: ABILITY_NAMES[ability] ?? ability,
+    ...Object.fromEntries(abilityMatrix.actors.map((a) => [a.name, a.counts[i]])),
   }));
 
   const skillBubbles = skillBars.map((b) => ({ name: b.name, value: b.count, color: b.fill }));
@@ -275,7 +286,18 @@ export default async function UatPage({
           >
             <div className="grid gap-4">
               <CharacterTable stats={stats} colors={colors} subjectLabel={subjectWord} />
-              <SkillRadarCard data={radarData} series={radarSeries} />
+              <RadarCard
+                title="Ability checks"
+                description="Bare checks, saves and concentration by ability"
+                data={abilityRadarData}
+                series={abilityRadarSeries}
+              />
+              <RadarCard
+                title="Skill checks"
+                description="Who leans on which skills"
+                data={radarData}
+                series={radarSeries}
+              />
             </div>
           </Section>
 

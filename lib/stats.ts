@@ -321,6 +321,43 @@ export async function actorSkillMatrix(
   };
 }
 
+const ABILITY_ORDER = ["str", "dex", "con", "int", "wis", "cha"];
+
+/**
+ * Subject × ability counts for the ability-checks radar: bare ability checks,
+ * saves and concentration (d20 rolls with an ability but no skill). All six
+ * axes always present, zero-filled.
+ */
+export async function actorAbilityMatrix(
+  campaignId: string,
+  f: StatFilters = {},
+  by: GroupBy = "actor",
+): Promise<SkillMatrix> {
+  const col = subjectCol(by);
+  const rows = await prisma.$queryRaw<{ subject: string; ability: string; count: bigint }[]>`
+    SELECT ${col} AS subject, ability, COUNT(*) AS count
+    FROM rolls
+    WHERE ${sqlFilters(campaignId, f)}
+      AND skill IS NULL
+      AND ability IS NOT NULL
+      AND d20 IS NOT NULL
+      AND ${col} IS NOT NULL AND ${col} <> ''
+    GROUP BY 1, 2`;
+  const bySubject = new Map<string, Map<string, number>>();
+  for (const r of rows) {
+    const m = bySubject.get(r.subject) ?? new Map<string, number>();
+    m.set(r.ability, Number(r.count));
+    bySubject.set(r.subject, m);
+  }
+  return {
+    skills: ABILITY_ORDER,
+    actors: [...bySubject.entries()].map(([name, m]) => ({
+      name,
+      counts: ABILITY_ORDER.map((a) => m.get(a) ?? 0),
+    })),
+  };
+}
+
 export type ItemUsage = {
   itemName: string;
   itemType: string | null;

@@ -252,10 +252,14 @@ export function DicePactsCard({ rows }: { rows: PactRow[] }) {
 
 export type RadarRow = Record<string, string | number>;
 
-export function SkillRadarCard({
+export function RadarCard({
+  title,
+  description,
   data,
   series,
 }: {
+  title: string;
+  description: string;
   data: RadarRow[];
   series: { name: string; color: string }[];
 }) {
@@ -266,14 +270,14 @@ export function SkillRadarCard({
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Skill coverage</CardTitle>
-        <CardDescription>Who leans on which skills</CardDescription>
+        <CardTitle>{title}</CardTitle>
+        <CardDescription>{description}</CardDescription>
       </CardHeader>
       <CardContent>
         <ChartContainer config={config} className="mx-auto h-80 w-full max-w-lg">
           <RadarChart data={data}>
             <PolarGrid strokeOpacity={0.3} />
-            <PolarAngleAxis dataKey="skill" fontSize={11} />
+            <PolarAngleAxis dataKey="axis" fontSize={11} />
             <ChartTooltip content={<ChartTooltipContent />} />
             {series.map((s) => (
               <Radar

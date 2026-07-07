@@ -487,6 +487,27 @@ export function uatSkillBuckets(rolls: FixtureRoll[]): SkillAbilityBucket[] {
   return [...acc.values()].sort((a, b) => b.count - a.count);
 }
 
+const ABILITY_ORDER = ["str", "dex", "con", "int", "wis", "cha"];
+
+export function uatAbilityMatrix(rolls: FixtureRoll[], by: GroupBy): SkillMatrix {
+  const bySubject = new Map<string, Map<string, number>>();
+  for (const r of rolls) {
+    const name = subjectOf(r, by);
+    const isD20 = r.dice.length === 1 && r.dice[0].f === 20;
+    if (r.skill || !r.ability || !isD20 || !name) continue;
+    const m = bySubject.get(name) ?? new Map();
+    m.set(r.ability, (m.get(r.ability) ?? 0) + 1);
+    bySubject.set(name, m);
+  }
+  return {
+    skills: ABILITY_ORDER,
+    actors: [...bySubject.entries()].map(([name, m]) => ({
+      name,
+      counts: ABILITY_ORDER.map((a) => m.get(a) ?? 0),
+    })),
+  };
+}
+
 export function uatSkillMatrix(rolls: FixtureRoll[], by: GroupBy): SkillMatrix {
   const bySubject = new Map<string, Map<string, number>>();
   for (const r of rolls) {

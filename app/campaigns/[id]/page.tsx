@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { prisma } from "@/lib/db/prisma";
 import { requireUserId } from "@/lib/campaigns";
 import {
+  actorAbilityMatrix,
   actorSkillMatrix,
   actorStats,
   actorTops,
@@ -41,9 +42,9 @@ import { CharacterTable, DeathSavesCard, ItemsCard, Section, StatCards } from ".
 import {
   D20HistogramCard,
   DicePactsCard,
+  RadarCard,
   RollTypesCard,
   SkillBarsCard,
-  SkillRadarCard,
   type NamedCount,
   type RadarRow,
 } from "./dashboard-charts";
@@ -107,6 +108,7 @@ export default async function CampaignPage({
     totals,
     skillBuckets,
     skillMatrix,
+    abilityMatrix,
     options,
     items,
     tops,
@@ -120,6 +122,7 @@ export default async function CampaignPage({
     campaignTotals(id, filters),
     skillAbilityBuckets(id, filters),
     actorSkillMatrix(id, filters, by),
+    actorAbilityMatrix(id, filters, by),
     filterOptions(id),
     itemUsage(id, filters),
     actorTops(id, filters, by),
@@ -202,8 +205,17 @@ export default async function CampaignPage({
     color: colors.get(a.name) ?? FALLBACK,
   }));
   const radarData: RadarRow[] = skillMatrix.skills.map((skill, i) => ({
-    skill: SKILL_NAMES[skill] ?? skill,
+    axis: SKILL_NAMES[skill] ?? skill,
     ...Object.fromEntries(skillMatrix.actors.map((a) => [a.name, a.counts[i]])),
+  }));
+
+  const abilityRadarSeries = abilityMatrix.actors.map((a) => ({
+    name: a.name,
+    color: colors.get(a.name) ?? FALLBACK,
+  }));
+  const abilityRadarData: RadarRow[] = abilityMatrix.skills.map((ability, i) => ({
+    axis: ABILITY_NAMES[ability] ?? ability,
+    ...Object.fromEntries(abilityMatrix.actors.map((a) => [a.name, a.counts[i]])),
   }));
 
   // Bubble packs — same filtered dataset, so slicers cascade PowerBI-style.
@@ -363,7 +375,18 @@ export default async function CampaignPage({
       >
         <div className="grid gap-4">
           <CharacterTable stats={stats} colors={colors} subjectLabel={subjectWord} />
-          <SkillRadarCard data={radarData} series={radarSeries} />
+          <RadarCard
+            title="Ability checks"
+            description="Bare checks, saves and concentration by ability"
+            data={abilityRadarData}
+            series={abilityRadarSeries}
+          />
+          <RadarCard
+            title="Skill checks"
+            description="Who leans on which skills"
+            data={radarData}
+            series={radarSeries}
+          />
         </div>
       </Section>
 
