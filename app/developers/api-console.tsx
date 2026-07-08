@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { ChevronDown } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import {
@@ -11,23 +12,26 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 
-// Interactive API console: fill the campaign credentials once, then execute
-// any endpoint against this deployment and read the live response. Fetches
-// are same-origin, so nothing extra to configure.
+// API reference + live console. Each endpoint is an accordion: parameter
+// table, example request/response packets, and a try-it form that executes
+// same-origin against this deployment.
 
 type ParamDef = {
   name: string;
   type: string;
   desc: string;
   options?: string[];
-  placeholder?: string;
+  example?: string;
 };
 
 type EndpointDef = {
   method: "GET";
   path: string;
+  summary: string;
   desc: string;
   params: ParamDef[];
+  exampleQuery?: string;
+  exampleResponse: string;
 };
 
 const ROLL_TYPES = [
@@ -50,30 +54,94 @@ const ENDPOINTS: EndpointDef[] = [
   {
     method: "GET",
     path: "/api/v1/rolls",
-    desc: "Individual rolls, oldest first — the same filter axes as the dashboard. Hidden death saves and deleted rolls are excluded.",
+    summary: "List rolls, filterable",
+    desc: "Individual rolls, oldest first — the same filter axes as the dashboard. Hidden death saves and soft-deleted rolls are excluded. Combine any parameters; all are optional.",
+    exampleQuery: "?type=attack&from=2026-07-01&limit=2",
     params: [
-      { name: "actor", type: "string", desc: "Exact character/monster name", placeholder: "Maeple Morningsong" },
-      { name: "type", type: "enum", desc: "Roll type", options: ROLL_TYPES },
-      { name: "kind", type: "enum", desc: "Actor bucket", options: ["pc", "npc", "monster"] },
-      { name: "session", type: "date", desc: "One play date", placeholder: "2026-07-06" },
-      { name: "from", type: "date", desc: "Start date, inclusive", placeholder: "2026-07-01" },
-      { name: "to", type: "date", desc: "End date, inclusive", placeholder: "2026-07-31" },
-      { name: "updated_since", type: "ISO datetime", desc: "Only rows written or updated since — for incremental sync. Orders by update time; key rows by (messageId, rollIndex), reprocessing recreates ids.", placeholder: "2026-07-06T00:00:00Z" },
-      { name: "limit", type: "1–500", desc: "Page size (default 100)", placeholder: "100" },
-      { name: "offset", type: "number", desc: "Pagination offset", placeholder: "0" },
+      { name: "actor", type: "string", desc: "Exact character or monster name", example: "Maeple Morningsong" },
+      { name: "type", type: "enum", desc: "Roll type", options: ROLL_TYPES, example: "attack" },
+      { name: "kind", type: "enum", desc: "Actor bucket, resolved like the dashboard filter", options: ["pc", "npc", "monster"], example: "pc" },
+      { name: "session", type: "date (YYYY-MM-DD)", desc: "One play date — a session", example: "2026-07-06" },
+      { name: "from", type: "date (YYYY-MM-DD)", desc: "Start date, inclusive", example: "2026-07-01" },
+      { name: "to", type: "date (YYYY-MM-DD)", desc: "End date, inclusive", example: "2026-07-31" },
+      { name: "updated_since", type: "ISO datetime", desc: "Only rows written or updated since — for incremental sync. Response orders by update time; key rows by (messageId, rollIndex), reprocessing recreates ids.", example: "2026-07-06T00:00:00Z" },
+      { name: "limit", type: "integer 1–500", desc: "Page size (default 100)", example: "100" },
+      { name: "offset", type: "integer", desc: "Pagination offset (default 0)", example: "0" },
     ],
+    exampleResponse: `{
+  "total": 132,
+  "limit": 2,
+  "offset": 0,
+  "rolls": [
+    {
+      "id": "332ef4b1-e908-4636-9516-ba36cccbc45d",
+      "messageId": "Q6s9UxM3tErjRJH9",
+      "rollType": "attack",
+      "actorFid": "ddbGiaSpi4775821",
+      "actorName": "Giant Spider",
+      "actorType": "npc",
+      "authorName": "Gamemaster",
+      "authorRole": "GAMEMASTER",
+      "itemName": "Bite",
+      "itemType": "weapon",
+      "activityType": "attack",
+      "formula": "1d20 + 3 + 2",
+      "total": 16,
+      "dice": [{ "f": 20, "r": 11 }],
+      "modifier": 5,
+      "dc": null,
+      "d20": 11,
+      "advantageState": 0,
+      "isNat20": false,
+      "isNat1": false,
+      "isHit": true,
+      "isCritical": false,
+      "damageTotal": null,
+      "damageType": null,
+      "targetCount": 1,
+      "ability": null,
+      "skill": null,
+      "rolledAt": "2026-07-06T15:26:41.000Z",
+      "createdAt": "2026-07-06T15:26:42.113Z",
+      "updatedAt": "2026-07-06T15:26:42.113Z"
+    }
+  ]
+}`,
   },
   {
     method: "GET",
     path: "/api/v1/sessions",
+    summary: "List play sessions",
     desc: "Play sessions — one per distinct date with rolls, numbered oldest-first. Dates feed the rolls endpoint's session parameter.",
     params: [],
+    exampleResponse: `{
+  "sessions": [
+    { "n": 1, "date": "2026-06-14", "rolls": 118 },
+    { "n": 2, "date": "2026-06-21", "rolls": 96 }
+  ]
+}`,
   },
   {
     method: "GET",
     path: "/api/v1/actors",
-    desc: "Discovered actors: names, effective kind (pc/npc/monster), CR where known, roll counts.",
+    summary: "List discovered actors",
+    desc: "The campaign's discovered actors: names, effective kind (pc/npc/monster), challenge rating where known, and roll counts.",
     params: [],
+    exampleResponse: `{
+  "actors": [
+    {
+      "foundryActorId": "ddbGiaSpi4775821",
+      "name": "Giant Spider",
+      "actorType": "npc",
+      "kindOverride": null,
+      "cr": 1,
+      "rollCount": 35,
+      "lastSeenAt": "2026-07-06T15:26:41.000Z",
+      "kind": "monster",
+      "assigned": false
+    }
+  ]
+}`,
   },
 ];
 
@@ -98,14 +166,18 @@ export function ApiConsole() {
   }, [campaignId, apiKey]);
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
       <section className="space-y-3">
-        <h2 className="text-lg font-semibold">Credentials</h2>
-        <p className="text-sm text-muted-foreground">
-          Both values live in your campaign&apos;s settings panel (GM only). The campaign ID
-          identifies, the API key authorizes — treat the key as a secret. They&apos;re kept in
-          this browser only.
+        <h2 className="text-lg font-semibold">Authentication</h2>
+        <p className="max-w-2xl text-sm text-muted-foreground">
+          Every request carries two headers — the same pair the Foundry module uses. Both come
+          from your campaign&apos;s settings panel (GM only). The campaign ID identifies, the
+          API key authorizes; treat the key as a secret. Values entered here stay in this
+          browser and power the try-it forms below.
         </p>
+        <pre className="overflow-x-auto rounded-md bg-muted p-3 font-mono text-xs leading-relaxed">
+          {`X-Campaign-Id: <campaign uuid>\nAuthorization: Bearer <api key>`}
+        </pre>
         <div className="grid gap-3 sm:grid-cols-2">
           <label className="block">
             <span className="mb-1 block font-mono text-[10px] tracking-widest text-muted-foreground uppercase">
@@ -133,10 +205,31 @@ export function ApiConsole() {
         </div>
       </section>
 
-      {ENDPOINTS.map((e) => (
-        <Endpoint key={e.path} def={e} campaignId={campaignId} apiKey={apiKey} />
-      ))}
+      <section className="space-y-3">
+        <h2 className="text-lg font-semibold">Endpoints</h2>
+        <div className="divide-y divide-border rounded-md border border-border">
+          {ENDPOINTS.map((e) => (
+            <Endpoint key={e.path} def={e} campaignId={campaignId} apiKey={apiKey} />
+          ))}
+        </div>
+      </section>
     </div>
+  );
+}
+
+function MethodChip({ method }: { method: string }) {
+  return (
+    <span className="rounded-sm border border-primary/40 px-1.5 py-0.5 font-mono text-[11px] font-semibold text-primary">
+      {method}
+    </span>
+  );
+}
+
+function SubHeading({ children }: { children: React.ReactNode }) {
+  return (
+    <h3 className="font-mono text-[10px] tracking-widest text-muted-foreground uppercase">
+      {children}
+    </h3>
   );
 }
 
@@ -162,10 +255,10 @@ function Endpoint({
     .map(([k, v]) => `${k}=${encodeURIComponent(v.trim())}`)
     .join("&");
   const url = `${def.path}${query ? `?${query}` : ""}`;
-  const curl = [
-    `curl "${origin}${url}" \\`,
-    `  -H "X-Campaign-Id: ${campaignId || "$CAMPAIGN_ID"}" \\`,
-    `  -H "Authorization: Bearer ${apiKey ? "••••••" : "$API_KEY"}"`,
+  const exampleCurl = [
+    `curl "${origin || "https://statgoblin.com"}${def.path}${def.exampleQuery ?? ""}" \\`,
+    `  -H "X-Campaign-Id: $CAMPAIGN_ID" \\`,
+    `  -H "Authorization: Bearer $API_KEY"`,
   ].join("\n");
 
   const send = async () => {
@@ -183,7 +276,6 @@ function Endpoint({
       } catch {
         // leave non-JSON as-is
       }
-      // Keep the pane responsive on huge pages.
       if (body.length > 200_000) body = `${body.slice(0, 200_000)}\n… truncated`;
       setResult({ status: res.status, ms: Math.round(performance.now() - started), body });
     } catch (err) {
@@ -198,87 +290,147 @@ function Endpoint({
   };
 
   return (
-    <section className="space-y-3 border-t border-border pt-6">
-      <div className="flex flex-wrap items-baseline gap-3">
-        <span className="rounded-sm border border-border px-1.5 py-0.5 font-mono text-xs font-semibold">
-          {def.method}
-        </span>
+    <details className="group">
+      <summary className="flex cursor-pointer list-none items-center gap-3 px-4 py-3 hover:bg-muted/40 [&::-webkit-details-marker]:hidden">
+        <MethodChip method={def.method} />
         <code className="font-mono text-sm font-semibold">{def.path}</code>
-      </div>
-      <p className="text-sm text-muted-foreground">{def.desc}</p>
+        <span className="hidden truncate text-sm text-muted-foreground sm:inline">
+          {def.summary}
+        </span>
+        <ChevronDown
+          size={16}
+          className="ml-auto shrink-0 text-muted-foreground transition-transform group-open:rotate-180"
+        />
+      </summary>
 
-      {def.params.length > 0 && (
-        <div className="grid grid-cols-2 gap-x-2 gap-y-3 sm:grid-cols-4">
-          {def.params.map((p) => (
-            <div key={p.name} className="min-w-0">
-              <span
-                className="mb-1 block font-mono text-[10px] tracking-widest text-muted-foreground uppercase"
-                title={p.desc}
-              >
-                {p.name}
-              </span>
-              {p.options ? (
-                <Select
-                  items={[{ value: "__none__", label: "—" }, ...p.options.map((o) => ({ value: o, label: o }))]}
-                  value={values[p.name] || "__none__"}
-                  onValueChange={(v) =>
-                    setValues((prev) => ({ ...prev, [p.name]: v === "__none__" || !v ? "" : v }))
-                  }
-                >
-                  <SelectTrigger className="w-full">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {[{ value: "__none__", label: "—" }, ...p.options.map((o) => ({ value: o, label: o }))].map(
-                      (i) => (
-                        <SelectItem key={i.value} value={i.value}>
-                          {i.label}
-                        </SelectItem>
-                      ),
-                    )}
-                  </SelectContent>
-                </Select>
-              ) : (
-                <Input
-                  value={values[p.name] ?? ""}
-                  onChange={(e) => setValues((prev) => ({ ...prev, [p.name]: e.target.value }))}
-                  placeholder={p.placeholder ?? p.type}
-                  className="font-mono text-xs"
-                />
-              )}
+      <div className="space-y-5 border-t border-border bg-muted/20 px-4 py-4">
+        <p className="max-w-2xl text-sm text-muted-foreground">{def.desc}</p>
+
+        {def.params.length > 0 && (
+          <div className="space-y-2">
+            <SubHeading>Query parameters</SubHeading>
+            <div className="overflow-x-auto rounded-md border border-border">
+              <table className="w-full text-left text-sm">
+                <thead>
+                  <tr className="border-b border-border bg-muted/40 text-xs text-muted-foreground">
+                    <th className="px-3 py-2 font-mono font-normal">parameter</th>
+                    <th className="px-3 py-2 font-mono font-normal">type</th>
+                    <th className="px-3 py-2 font-mono font-normal">example</th>
+                    <th className="px-3 py-2 font-mono font-normal">description</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {def.params.map((p) => (
+                    <tr key={p.name} className="border-b border-border/60 last:border-b-0">
+                      <td className="px-3 py-2 align-top font-mono whitespace-nowrap">{p.name}</td>
+                      <td className="px-3 py-2 align-top font-mono whitespace-nowrap text-muted-foreground">
+                        {p.type}
+                      </td>
+                      <td className="px-3 py-2 align-top font-mono whitespace-nowrap text-muted-foreground">
+                        {p.example ?? "—"}
+                      </td>
+                      <td className="min-w-56 px-3 py-2 align-top text-muted-foreground">{p.desc}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
-          ))}
-        </div>
-      )}
-
-      <div className="flex flex-wrap items-center gap-3">
-        <Button size="sm" disabled={pending || !campaignId || !apiKey} onClick={send}>
-          {pending ? "Sending…" : "Send request"}
-        </Button>
-        <code className="min-w-0 flex-1 truncate font-mono text-xs text-muted-foreground">{url}</code>
-      </div>
-
-      <pre className="overflow-x-auto rounded-md bg-muted p-3 font-mono text-xs leading-relaxed">{curl}</pre>
-
-      {result && (
-        <div className="space-y-1">
-          <div className="font-mono text-xs">
-            <span
-              className={
-                result.status >= 200 && result.status < 300
-                  ? "text-green-600 dark:text-green-500"
-                  : "text-red-600 dark:text-red-400"
-              }
-            >
-              {result.status === 0 ? "network error" : `HTTP ${result.status}`}
-            </span>
-            <span className="text-muted-foreground"> · {result.ms} ms</span>
           </div>
-          <pre className="max-h-96 overflow-auto rounded-md border border-border p-3 font-mono text-xs leading-relaxed">
-            {result.body}
+        )}
+
+        <div className="space-y-2">
+          <SubHeading>Example request</SubHeading>
+          <pre className="overflow-x-auto rounded-md bg-muted p-3 font-mono text-xs leading-relaxed">
+            {exampleCurl}
           </pre>
         </div>
-      )}
-    </section>
+
+        <div className="space-y-2">
+          <SubHeading>Example response · 200</SubHeading>
+          <pre className="max-h-72 overflow-auto rounded-md bg-muted p-3 font-mono text-xs leading-relaxed">
+            {def.exampleResponse}
+          </pre>
+        </div>
+
+        <div className="space-y-3">
+          <SubHeading>Try it</SubHeading>
+          {def.params.length > 0 && (
+            <div className="grid grid-cols-2 gap-x-2 gap-y-3 sm:grid-cols-4">
+              {def.params.map((p) => (
+                <div key={p.name} className="min-w-0">
+                  <span
+                    className="mb-1 block font-mono text-[10px] tracking-widest text-muted-foreground uppercase"
+                    title={p.desc}
+                  >
+                    {p.name}
+                  </span>
+                  {p.options ? (
+                    <Select
+                      items={[{ value: "__none__", label: "—" }, ...p.options.map((o) => ({ value: o, label: o }))]}
+                      value={values[p.name] || "__none__"}
+                      onValueChange={(v) =>
+                        setValues((prev) => ({ ...prev, [p.name]: v === "__none__" || !v ? "" : v }))
+                      }
+                    >
+                      <SelectTrigger className="w-full">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {[{ value: "__none__", label: "—" }, ...p.options.map((o) => ({ value: o, label: o }))].map(
+                          (i) => (
+                            <SelectItem key={i.value} value={i.value}>
+                              {i.label}
+                            </SelectItem>
+                          ),
+                        )}
+                      </SelectContent>
+                    </Select>
+                  ) : (
+                    <Input
+                      value={values[p.name] ?? ""}
+                      onChange={(e) => setValues((prev) => ({ ...prev, [p.name]: e.target.value }))}
+                      placeholder={p.example ?? p.type}
+                      className="font-mono text-xs"
+                    />
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+          <div className="flex flex-wrap items-center gap-3">
+            <Button size="sm" disabled={pending || !campaignId || !apiKey} onClick={send}>
+              {pending ? "Sending…" : "Send request"}
+            </Button>
+            <code className="min-w-0 flex-1 truncate font-mono text-xs text-muted-foreground">
+              {url}
+            </code>
+          </div>
+          {!campaignId || !apiKey ? (
+            <p className="text-xs text-muted-foreground">
+              Fill in the credentials at the top of the page to send requests.
+            </p>
+          ) : null}
+          {result && (
+            <div className="space-y-1">
+              <div className="font-mono text-xs">
+                <span
+                  className={
+                    result.status >= 200 && result.status < 300
+                      ? "text-green-600 dark:text-green-500"
+                      : "text-red-600 dark:text-red-400"
+                  }
+                >
+                  {result.status === 0 ? "network error" : `HTTP ${result.status}`}
+                </span>
+                <span className="text-muted-foreground"> · {result.ms} ms</span>
+              </div>
+              <pre className="max-h-96 overflow-auto rounded-md border border-border bg-background p-3 font-mono text-xs leading-relaxed">
+                {result.body}
+              </pre>
+            </div>
+          )}
+        </div>
+      </div>
+    </details>
   );
 }

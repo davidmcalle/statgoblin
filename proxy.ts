@@ -8,6 +8,8 @@ const isPublicRoute = createRouteMatcher([
   "/api/ingest",
   // Read API authenticates itself with the campaign key pair, not Clerk.
   "/api/v1/(.*)",
+  // Public docs — the try-it console needs user-supplied credentials anyway.
+  "/developers",
   "/sign-in(.*)",
   "/sign-up(.*)",
   "/join/(.*)",
