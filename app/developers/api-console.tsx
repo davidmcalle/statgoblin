@@ -114,8 +114,12 @@ const ENDPOINTS: EndpointDef[] = [
     method: "GET",
     path: "/api/v1/sessions",
     summary: "List play sessions",
-    desc: "Play sessions — one per distinct date with rolls, numbered oldest-first. Dates feed the rolls endpoint's session parameter.",
-    params: [],
+    desc: "Play sessions — one per distinct date with rolls, numbered oldest-first. Dates feed the rolls endpoint's session parameter. With filters, numbering stays campaign-global while counts narrow to the matching rolls; dates with no matches drop out.",
+    params: [
+      { name: "actor", type: "string", desc: "Sessions where this character/monster rolled, with their roll counts", example: "Maeple Morningsong" },
+      { name: "kind", type: "enum", desc: "Narrow counts to an actor bucket", options: ["pc", "npc", "monster"], example: "monster" },
+    ],
+    exampleQuery: "?kind=monster",
     exampleResponse: `{
   "sessions": [
     { "n": 1, "date": "2026-06-14", "rolls": 118 },
@@ -127,8 +131,15 @@ const ENDPOINTS: EndpointDef[] = [
     method: "GET",
     path: "/api/v1/actors",
     summary: "List discovered actors",
-    desc: "The campaign's discovered actors: names, effective kind (pc/npc/monster), challenge rating where known, and roll counts.",
-    params: [],
+    desc: "The campaign's discovered actors: names, effective kind (pc/npc/monster), challenge rating where known, and lifetime roll counts. Date filters keep only actors that actually rolled in the window.",
+    params: [
+      { name: "kind", type: "enum", desc: "Effective kind", options: ["pc", "npc", "monster"], example: "monster" },
+      { name: "search", type: "string", desc: "Case-insensitive name substring", example: "spider" },
+      { name: "session", type: "date (YYYY-MM-DD)", desc: "Only actors that rolled on this play date", example: "2026-07-06" },
+      { name: "from", type: "date (YYYY-MM-DD)", desc: "Activity window start, inclusive", example: "2026-07-01" },
+      { name: "to", type: "date (YYYY-MM-DD)", desc: "Activity window end, inclusive", example: "2026-07-31" },
+    ],
+    exampleQuery: "?kind=monster&session=2026-07-06",
     exampleResponse: `{
   "actors": [
     {
