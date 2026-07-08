@@ -27,12 +27,24 @@ function fmtDate(date: string): string {
 export async function postWebhook(
   webhookUrl: string,
   embeds: object[],
+  files: { name: string; data: Buffer }[] = [],
 ): Promise<void> {
-  const res = await fetch(webhookUrl, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ username: "StatGoblin", embeds }),
-  });
+  let res: Response;
+  if (files.length === 0) {
+    res = await fetch(webhookUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username: "StatGoblin", embeds }),
+    });
+  } else {
+    // Attachments ride multipart; Discord tiles multiple images as a gallery.
+    const form = new FormData();
+    form.append("payload_json", JSON.stringify({ username: "StatGoblin", embeds }));
+    files.forEach((f, i) => {
+      form.append(`files[${i}]`, new Blob([new Uint8Array(f.data)], { type: "image/png" }), f.name);
+    });
+    res = await fetch(webhookUrl, { method: "POST", body: form });
+  }
   if (!res.ok) {
     throw new Error(`Discord rejected the summary (${res.status}). Check the webhook URL.`);
   }
@@ -45,29 +57,32 @@ function publicUrl(url: string | null | undefined): string | undefined {
 
 const EMBED_COLOR = 0x3fa284;
 
+export function sessionLabelOf(sessions: { n: number; date: string }[]): string {
+  return sessions.length === 1
+    ? `Session ${sessions[0].n} — ${fmtDate(sessions[0].date)}`
+    : `Sessions ${sessions.map((s) => s.n).join(", ")}`;
+}
+
 /**
- * The generated-summary message: one header embed (campaign image, session
- * label, narrative, headline stats) plus one small embed per award carrying
- * the character's portrait and the LLM's commentary. Discord caps a message
- * at 10 embeds — header + up to 9 awards.
+ * The header embed: campaign image, session label, narrative, headline stats,
+ * highlights and the session's notable rolls. Award cards travel separately
+ * as image attachments (text composed onto the art).
  */
-export function buildGeneratedSummaryEmbeds(
+export function buildSummaryHeaderEmbed(
   campaignName: string,
   campaignImage: string,
   payload: {
     sessions: { n: number; date: string }[];
     totals: { totalRolls: number; nat20s: number; nat1s: number; avgD20: number | null };
-    awards: { title: string; actorName: string; statLine: string; comment?: string }[];
     narrative: string | null;
     highlights?: string[];
+    notables?: {
+      best: { actorName: string; total: number; d20: number; label: string }[];
+      biggestHit: { actorName: string; damage: number; itemName: string | null } | null;
+    };
   },
-  actorImages: Map<string, string>,
-): object[] {
-  const { sessions, totals, awards, narrative, highlights } = payload;
-  const sessionLabel =
-    sessions.length === 1
-      ? `Session ${sessions[0].n} — ${fmtDate(sessions[0].date)}`
-      : `Sessions ${sessions.map((s) => s.n).join(", ")}`;
+): object {
+  const { sessions, totals, narrative, highlights, notables } = payload;
 
   const headline = [
     `🎲 **${totals.totalRolls}** rolls`,
@@ -79,29 +94,29 @@ export function buildGeneratedSummaryEmbeds(
     .join(" · ");
 
   const header: Record<string, unknown> = {
-    title: `${campaignName} — ${sessionLabel}`,
+    title: `${campaignName} — ${sessionLabelOf(sessions)}`,
     description: [narrative, headline].filter(Boolean).join("\n\n").slice(0, 4000),
     color: EMBED_COLOR,
     footer: { text: "StatGoblin" },
   };
-  if (highlights?.length) {
-    header.fields = [
-      { name: "Highlights", value: highlights.map((h) => `• ${h}`).join("\n").slice(0, 1024) },
-    ];
+
+  const fields: { name: string; value: string }[] = [];
+  if (notables?.best.length) {
+    const lines = notables.best.map(
+      (n) => `**${n.total}** — ${n.actorName}, ${n.label} (d20: ${n.d20})`,
+    );
+    if (notables.biggestHit) {
+      const h = notables.biggestHit;
+      lines.push(`**${h.damage} damage** — ${h.actorName}${h.itemName ? `, ${h.itemName}` : ""}`);
+    }
+    fields.push({ name: "Top rolls", value: lines.join("\n").slice(0, 1024) });
   }
+  if (highlights?.length) {
+    fields.push({ name: "Highlights", value: highlights.map((h) => `• ${h}`).join("\n").slice(0, 1024) });
+  }
+  if (fields.length) header.fields = fields;
+
   const image = publicUrl(campaignImage);
   if (image) header.thumbnail = { url: image };
-
-  const awardEmbeds = awards.slice(0, 9).map((a) => {
-    const embed: Record<string, unknown> = {
-      author: { name: `${a.title} — ${a.actorName}` },
-      description: [a.comment, `*${a.statLine}*`].filter(Boolean).join("\n"),
-      color: EMBED_COLOR,
-    };
-    const portrait = publicUrl(actorImages.get(a.actorName));
-    if (portrait) embed.thumbnail = { url: portrait };
-    return embed;
-  });
-
-  return [header, ...awardEmbeds];
+  return header;
 }

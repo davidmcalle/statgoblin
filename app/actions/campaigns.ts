@@ -12,7 +12,13 @@ import {
   requireUserId,
   touchCampaign,
 } from "@/lib/campaigns";
-import { buildGeneratedSummaryEmbeds, isValidWebhookUrl, postWebhook } from "@/lib/discord";
+import {
+  buildSummaryHeaderEmbed,
+  isValidWebhookUrl,
+  postWebhook,
+  sessionLabelOf,
+} from "@/lib/discord";
+import { renderAwardCard } from "@/lib/cards";
 import { getOrCreateSummary } from "@/lib/summary";
 import { sessions } from "@/lib/stats";
 import { sessionDayFrom } from "@/lib/session-day";
@@ -86,6 +92,7 @@ export async function updateCampaign(campaignId: string, formData: FormData): Pr
 export async function sendDiscordSummary(
   campaignId: string,
   dates: string[],
+  regenerate = false,
 ): Promise<{ sent: boolean; cached?: boolean; error?: string }> {
   const userId = await requireUserId();
   const campaign = await requireCreator(campaignId, userId);
@@ -101,22 +108,41 @@ export async function sendDiscordSummary(
     .map((d) => valid.get(d)!);
   if (picked.length === 0) return { sent: false, error: "Pick at least one session" };
 
-  const { payload, cached } = await getOrCreateSummary(campaignId, campaign.name, picked);
+  const { payload, cached } = await getOrCreateSummary(campaignId, campaign.name, picked, regenerate);
 
   const actors = await prisma.actor.findMany({
     where: { campaignId, image: { not: "" } },
     select: { name: true, image: true },
   });
+  const images = new Map(actors.map((a) => [a.name, a.image]));
+
+  // Award cards: text composed onto the character art, attached as a gallery.
+  const label = sessionLabelOf(payload.sessions);
+  const cards = (
+    await Promise.all(
+      payload.awards.slice(0, 9).map(async (a, i) => {
+        try {
+          const data = await renderAwardCard({
+            title: a.title,
+            actorName: a.actorName,
+            comment: a.comment,
+            statLine: a.statLine,
+            sessionLabel: label,
+            imageUrl: images.get(a.actorName),
+          });
+          return { name: `award-${i}.png`, data };
+        } catch {
+          return null; // one bad portrait shouldn't sink the send
+        }
+      }),
+    )
+  ).filter((c): c is { name: string; data: Buffer } => c !== null);
 
   try {
     await postWebhook(
       campaign.discordWebhookUrl,
-      buildGeneratedSummaryEmbeds(
-        campaign.name,
-        campaign.image,
-        payload,
-        new Map(actors.map((a) => [a.name, a.image])),
-      ),
+      [buildSummaryHeaderEmbed(campaign.name, campaign.image, payload)],
+      cards,
     );
   } catch (e) {
     return { sent: false, error: e instanceof Error ? e.message : "Failed to reach Discord" };

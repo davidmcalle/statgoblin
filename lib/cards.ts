@@ -1,0 +1,147 @@
+import { readFile } from "node:fs/promises";
+import path from "node:path";
+import satori from "satori";
+import { Resvg } from "@resvg/resvg-js";
+
+// Award "sharable" cards: the character's art as the background with the
+// award text composed over it — rendered server-side (satori → SVG → PNG)
+// and attached to the Discord message, so the text sits on the image itself.
+
+const WIDTH = 480;
+const HEIGHT = 600;
+
+let fontsPromise: Promise<{ regular: Buffer; bold: Buffer }> | null = null;
+function loadFonts() {
+  fontsPromise ??= (async () => {
+    const dir = path.join(process.cwd(), "public", "fonts");
+    const [regular, bold] = await Promise.all([
+      readFile(path.join(dir, "SourceSans3-Regular.ttf")),
+      readFile(path.join(dir, "SourceSans3-Bold.ttf")),
+    ]);
+    return { regular, bold };
+  })();
+  return fontsPromise;
+}
+
+/** Fetch a portrait and inline it as a data URI (satori doesn't fetch). */
+async function fetchImageDataUri(url: string | undefined): Promise<string | null> {
+  if (!url || !/^https?:\/\//.test(url)) return null;
+  try {
+    const res = await fetch(url, { signal: AbortSignal.timeout(8000) });
+    if (!res.ok) return null;
+    const type = res.headers.get("content-type") ?? "image/png";
+    if (!type.startsWith("image/")) return null;
+    const buf = Buffer.from(await res.arrayBuffer());
+    if (buf.byteLength > 8_000_000) return null;
+    return `data:${type};base64,${buf.toString("base64")}`;
+  } catch {
+    return null;
+  }
+}
+
+type El = { type: string; props: Record<string, unknown> };
+const el = (type: string, style: Record<string, unknown>, children?: unknown, rest?: Record<string, unknown>): El => ({
+  type,
+  props: { style, ...(children !== undefined ? { children } : {}), ...rest },
+});
+
+export type AwardCardInput = {
+  title: string;
+  actorName: string;
+  comment?: string;
+  statLine: string;
+  sessionLabel: string;
+  imageUrl?: string;
+};
+
+/** One award card PNG. */
+export async function renderAwardCard(input: AwardCardInput): Promise<Buffer> {
+  const fonts = await loadFonts();
+  const portrait = await fetchImageDataUri(input.imageUrl);
+
+  const tree = el(
+    "div",
+    {
+      display: "flex",
+      flexDirection: "column",
+      width: WIDTH,
+      height: HEIGHT,
+      backgroundColor: "#171716",
+      position: "relative",
+      fontFamily: "Source Sans",
+    },
+    [
+      // Background art (or initial) filling the card
+      portrait
+        ? el("img", { position: "absolute", width: WIDTH, height: HEIGHT, objectFit: "cover" }, undefined, { src: portrait, width: WIDTH, height: HEIGHT })
+        : el(
+            "div",
+            {
+              position: "absolute",
+              width: WIDTH,
+              height: HEIGHT,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              color: "#3a3a38",
+              fontSize: 260,
+              fontWeight: 700,
+            },
+            input.actorName.slice(0, 1),
+          ),
+      // Legibility gradient over the lower half
+      el("div", {
+        position: "absolute",
+        width: WIDTH,
+        height: HEIGHT,
+        backgroundImage:
+          "linear-gradient(to bottom, rgba(13,13,12,0.55) 0%, rgba(13,13,12,0.0) 28%, rgba(13,13,12,0.0) 42%, rgba(13,13,12,0.88) 72%, rgba(13,13,12,0.96) 100%)",
+      }),
+      // Session tag, top left
+      el(
+        "div",
+        {
+          position: "absolute",
+          top: 18,
+          left: 22,
+          color: "rgba(255,255,255,0.75)",
+          fontSize: 15,
+          letterSpacing: 2,
+          textTransform: "uppercase",
+        },
+        input.sessionLabel,
+      ),
+      // Text block, bottom
+      el(
+        "div",
+        {
+          position: "absolute",
+          bottom: 0,
+          left: 0,
+          display: "flex",
+          flexDirection: "column",
+          padding: "0 26px 26px 26px",
+          width: WIDTH,
+        },
+        [
+          el("div", { color: "#7fd6a4", fontSize: 21, fontWeight: 700, letterSpacing: 1.5, textTransform: "uppercase" }, input.title),
+          el("div", { color: "#ffffff", fontSize: 34, fontWeight: 700, lineHeight: 1.1, marginTop: 6 }, input.actorName),
+          ...(input.comment
+            ? [el("div", { color: "rgba(255,255,255,0.92)", fontSize: 21, lineHeight: 1.35, marginTop: 12 }, `“${input.comment}”`)]
+            : []),
+          el("div", { color: "rgba(255,255,255,0.6)", fontSize: 17, marginTop: 12 }, input.statLine),
+        ],
+      ),
+    ],
+  );
+
+  const svg = await satori(tree as never, {
+    width: WIDTH,
+    height: HEIGHT,
+    fonts: [
+      { name: "Source Sans", data: fonts.regular, weight: 400, style: "normal" },
+      { name: "Source Sans", data: fonts.bold, weight: 700, style: "normal" },
+    ],
+  });
+  return Buffer.from(new Resvg(svg, { fitTo: { mode: "width", value: WIDTH } }).render().asPng());
+}

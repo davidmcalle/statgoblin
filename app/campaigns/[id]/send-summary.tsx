@@ -103,7 +103,7 @@ export function SendSummary({
                     </li>
                   ))}
               </ul>
-              <div className="flex items-center gap-3">
+              <div className="flex flex-wrap items-center gap-3">
                 <Button
                   disabled={pending || picked.size === 0}
                   onClick={() =>
@@ -114,13 +114,27 @@ export function SendSummary({
                   }
                 >
                   {pending
-                    ? "Generating…"
+                    ? "Working…"
                     : picked.size === 0
                       ? "Send"
                       : alreadyGenerated
                         ? "Send"
                         : "Generate Summary & Send"}
                 </Button>
+                {alreadyGenerated && (
+                  <Button
+                    variant="outline"
+                    disabled={pending}
+                    onClick={() =>
+                      startTransition(async () => {
+                        const result = await sendDiscordSummary(campaignId, [...picked], true);
+                        setStatus(result.sent ? "Regenerated & sent ✓" : (result.error ?? "Failed"));
+                      })
+                    }
+                  >
+                    Regenerate & Send
+                  </Button>
+                )}
                 {status && <span className="text-sm text-muted-foreground">{status}</span>}
               </div>
             </>

@@ -3,6 +3,7 @@ import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { z } from "zod";
 import { prisma } from "@/lib/db/prisma";
 import { sessionDayFrom } from "@/lib/session-day";
+import { ABILITY_NAMES, SKILL_NAMES } from "@/lib/dnd5e-meta";
 import {
   actorStats,
   campaignTotals,
@@ -37,6 +38,11 @@ export type SummaryPayload = {
   awards: Award[];
   narrative: string | null;
   highlights?: string[];
+  notables?: {
+    best: NotableRoll[];
+    worst: NotableRoll[];
+    biggestHit: { actorName: string; damage: number; itemName: string | null; damageType: string | null } | null;
+  };
   generatedAt: string;
 };
 
@@ -119,6 +125,78 @@ function computeAwards(stats: ActorStats[], diversity: Map<string, number>): Awa
   });
 }
 
+export type NotableRoll = {
+  actorName: string;
+  total: number;
+  d20: number;
+  label: string;
+};
+
+/** What a d20 roll was for, in words: "Stealth check", "Longbow attack"… */
+function rollLabel(r: {
+  rollType: string;
+  skill: string | null;
+  ability: string | null;
+  itemName: string | null;
+}): string {
+  if (r.skill) return `${SKILL_NAMES[r.skill] ?? r.skill} check`;
+  if (r.rollType === "save") return `${r.ability ? (ABILITY_NAMES[r.ability] ?? r.ability) + " " : ""}save`;
+  if (r.rollType === "attack") return r.itemName ? `${r.itemName} attack` : "attack";
+  if (r.rollType === "ability") return `${r.ability ? (ABILITY_NAMES[r.ability] ?? r.ability) + " " : ""}check`;
+  if (r.rollType === "initiative") return "initiative";
+  if (r.rollType === "death") return "death save";
+  if (r.rollType === "concentration") return "concentration save";
+  return r.rollType;
+}
+
+/** The session's top d20 rolls and the single biggest damage hit. */
+async function notableRolls(campaignId: string, dates: string[]) {
+  const base = {
+    campaignId,
+    deletedAt: null,
+    isHidden: false,
+    actorName: { not: null },
+    sessionDate: { in: dates.map(sessionDayFrom) },
+  };
+  const [top, low, hit] = await Promise.all([
+    prisma.roll.findMany({
+      where: { ...base, d20: { not: null }, total: { not: null } },
+      orderBy: { total: "desc" },
+      take: 5,
+      select: { actorName: true, total: true, d20: true, rollType: true, skill: true, ability: true, itemName: true },
+    }),
+    prisma.roll.findMany({
+      where: { ...base, d20: { not: null }, total: { not: null } },
+      orderBy: { total: "asc" },
+      take: 3,
+      select: { actorName: true, total: true, d20: true, rollType: true, skill: true, ability: true, itemName: true },
+    }),
+    prisma.roll.findFirst({
+      where: { ...base, rollType: "damage", damageTotal: { not: null } },
+      orderBy: { damageTotal: "desc" },
+      select: { actorName: true, damageTotal: true, itemName: true, damageType: true },
+    }),
+  ]);
+  const shape = (r: (typeof top)[number]): NotableRoll => ({
+    actorName: r.actorName!,
+    total: r.total!,
+    d20: r.d20!,
+    label: rollLabel(r),
+  });
+  return {
+    best: top.map(shape),
+    worst: low.map(shape),
+    biggestHit: hit
+      ? {
+          actorName: hit.actorName!,
+          damage: hit.damageTotal!,
+          itemName: hit.itemName,
+          damageType: hit.damageType,
+        }
+      : null,
+  };
+}
+
 /** Distinct roll variety (types + skills) per actor for the diversity award. */
 async function rollDiversity(campaignId: string, dates: string[]): Promise<Map<string, number>> {
   const rows = await prisma.roll.findMany({
@@ -173,6 +251,7 @@ async function generateNarrative(
   stats: ActorStats[],
   awards: Award[],
   items: { itemName: string; uses: number }[],
+  notables: NonNullable<SummaryPayload["notables"]>,
 ): Promise<{ narrative: string; comments: Map<string, string>; highlights: string[] } | null> {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey || apiKey === "change-me") return null;
@@ -193,6 +272,9 @@ async function generateNarrative(
       })),
       awards: awards.map(({ key, title, actorName, statLine }) => ({ key, title, actorName, statLine })),
       favouriteItems: items.slice(0, 5),
+      bestRolls: notables.best,
+      worstRolls: notables.worst,
+      biggestHit: notables.biggestHit,
     };
     const response = await client.messages.parse({
       model: "claude-opus-4-8",
@@ -230,25 +312,46 @@ export async function getOrCreateSummary(
   campaignId: string,
   campaignName: string,
   picked: SessionInfo[],
+  regenerate = false,
 ): Promise<{ payload: SummaryPayload; cached: boolean }> {
   const dates = picked.map((s) => s.date);
   const key = datesKeyOf(dates);
-  const existing = await prisma.sessionSummary.findUnique({
-    where: { campaignId_datesKey: { campaignId, datesKey: key } },
-  });
-  if (existing) return { payload: existing.payload as SummaryPayload, cached: true };
+  if (regenerate) {
+    await prisma.sessionSummary.deleteMany({
+      where: { campaignId, datesKey: key },
+    });
+  } else {
+    const existing = await prisma.sessionSummary.findUnique({
+      where: { campaignId_datesKey: { campaignId, datesKey: key } },
+    });
+    if (existing) return { payload: existing.payload as SummaryPayload, cached: true };
+  }
 
   const filters = { dates, includeHidden: false };
-  const [totals, stats, items, diversity] = await Promise.all([
+  const [totals, stats, items, diversity, notables] = await Promise.all([
     campaignTotals(campaignId, filters),
     actorStats(campaignId, filters),
     itemUsage(campaignId, filters, 5),
     rollDiversity(campaignId, dates),
+    notableRolls(campaignId, dates),
   ]);
   // Death saves already excluded for players via includeHidden: false.
   await recentDeathSaves(campaignId, filters, 6);
 
   const awards = computeAwards(stats, diversity);
+  // Enrich award stat lines with concrete detail from the notable rolls.
+  const bestOf = new Map<string, NotableRoll>();
+  for (const n of notables.best) if (!bestOf.has(n.actorName)) bestOf.set(n.actorName, n);
+  for (const award of awards) {
+    if (award.key === "highest_roller") {
+      const best = bestOf.get(award.actorName);
+      if (best) award.statLine += ` · best: ${best.total} on a ${best.label}`;
+    }
+    if (award.key === "top_damage" && notables.biggestHit?.actorName === award.actorName) {
+      const hit = notables.biggestHit;
+      award.statLine += ` · biggest hit: ${hit.damage}${hit.itemName ? ` with ${hit.itemName}` : ""}`;
+    }
+  }
   const slimTotals = {
     totalRolls: totals.totalRolls,
     nat20s: totals.nat20s,
@@ -259,7 +362,7 @@ export async function getOrCreateSummary(
       : null,
   };
 
-  const llm = await generateNarrative(campaignName, picked, slimTotals, stats, awards, items);
+  const llm = await generateNarrative(campaignName, picked, slimTotals, stats, awards, items, notables);
   if (llm) {
     for (const award of awards) {
       award.comment = llm.comments.get(award.key);
@@ -273,6 +376,7 @@ export async function getOrCreateSummary(
     awards,
     narrative: llm?.narrative ?? null,
     highlights: llm?.highlights ?? [],
+    notables,
     generatedAt: new Date().toISOString(),
   };
 
