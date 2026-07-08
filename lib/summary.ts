@@ -3,6 +3,7 @@ import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { z } from "zod";
 import { prisma } from "@/lib/db/prisma";
 import { sessionDayFrom } from "@/lib/session-day";
+import { effectiveKind } from "@/lib/kind";
 import { ABILITY_NAMES, SKILL_NAMES } from "@/lib/dnd5e-meta";
 import {
   actorStats,
@@ -23,6 +24,27 @@ export type Award = {
   actorName: string;
   statLine: string;
   comment?: string;
+  kind?: "pc" | "npc" | "monster";
+};
+
+/** Named-count pairs: "Fireball ×3", "Sneak Attack ×5", "Stealth ×4"… */
+type Tally = { name: string; count: number };
+
+export type CharacterDetail = {
+  name: string;
+  kind: "pc" | "npc" | "monster";
+  cr: number | null;
+  rolls: number;
+  avgD20: number | null;
+  nat20s: number;
+  nat1s: number;
+  damageDealt: number;
+  healingDone: number;
+  attacks: Tally[];
+  spells: Tally[];
+  features: Tally[];
+  skills: Tally[];
+  saves: number;
 };
 
 export type SummaryPayload = {
@@ -197,6 +219,92 @@ async function notableRolls(campaignId: string, dates: string[]) {
   };
 }
 
+/**
+ * Per-character loadout breakdown for the picked sessions: which weapons
+ * attacked, which spells were cast, which features fired, which skills got
+ * rolled — the material the narrative needs to notice "the cleric healed"
+ * or "the rogue sneak-attacked all night".
+ */
+async function characterDetails(
+  campaignId: string,
+  dates: string[],
+  stats: ActorStats[],
+): Promise<CharacterDetail[]> {
+  const [rows, actors] = await Promise.all([
+    prisma.roll.groupBy({
+      by: ["actorName", "rollType", "itemName", "itemType", "skill"],
+      where: {
+        campaignId,
+        deletedAt: null,
+        isHidden: false,
+        actorName: { not: null },
+        sessionDate: { in: dates.map(sessionDayFrom) },
+      },
+      _count: { _all: true },
+    }),
+    prisma.actor.findMany({
+      where: { campaignId },
+      select: { name: true, actorType: true, kindOverride: true, assignedUserId: true, cr: true },
+    }),
+  ]);
+
+  const kindOf = new Map(
+    actors.map((a) => [a.name, { kind: effectiveKind(a), cr: a.cr }] as const),
+  );
+
+  const detail = new Map<string, CharacterDetail>();
+  const statByName = new Map(stats.map((s) => [s.actorName, s]));
+  const bump = (list: Tally[], name: string, count: number) => {
+    const hit = list.find((t) => t.name === name);
+    if (hit) hit.count += count;
+    else list.push({ name, count });
+  };
+
+  for (const row of rows) {
+    const name = row.actorName!;
+    let d = detail.get(name);
+    if (!d) {
+      const s = statByName.get(name);
+      const meta = kindOf.get(name);
+      d = {
+        name,
+        kind: meta?.kind ?? "monster",
+        cr: meta?.cr ?? null,
+        rolls: s?.allRolls ?? 0,
+        avgD20: s?.avgD20 ?? null,
+        nat20s: s?.nat20s ?? 0,
+        nat1s: s?.nat1s ?? 0,
+        damageDealt: s?.damage ?? 0,
+        healingDone: s?.healing ?? 0,
+        attacks: [],
+        spells: [],
+        features: [],
+        skills: [],
+        saves: 0,
+      };
+      detail.set(name, d);
+    }
+    const n = row._count._all;
+    if (row.rollType === "attack" && row.itemName) bump(d.attacks, row.itemName, n);
+    else if (row.rollType === "usage" && row.itemType === "spell" && row.itemName)
+      bump(d.spells, row.itemName, n);
+    else if (row.rollType === "usage" && row.itemType === "feat" && row.itemName)
+      bump(d.features, row.itemName, n);
+    else if (row.rollType === "skill" && row.skill)
+      bump(d.skills, SKILL_NAMES[row.skill] ?? row.skill, n);
+    else if (row.rollType === "save" || row.rollType === "concentration") d.saves += n;
+  }
+
+  const sortTallies = (d: CharacterDetail) => {
+    for (const list of [d.attacks, d.spells, d.features, d.skills]) {
+      list.sort((a, b) => b.count - a.count);
+    }
+  };
+  const all = [...detail.values()];
+  all.forEach(sortTallies);
+  return all.sort((a, b) => b.rolls - a.rolls);
+}
+
 /** Distinct roll variety (types + skills) per actor for the diversity award. */
 async function rollDiversity(campaignId: string, dates: string[]): Promise<Map<string, number>> {
   const rows = await prisma.roll.findMany({
@@ -248,7 +356,7 @@ async function generateNarrative(
   campaignName: string,
   sessions: SessionInfo[],
   totals: SummaryPayload["totals"],
-  stats: ActorStats[],
+  characters: CharacterDetail[],
   awards: Award[],
   items: { itemName: string; uses: number }[],
   notables: NonNullable<SummaryPayload["notables"]>,
@@ -261,16 +369,16 @@ async function generateNarrative(
       campaign: campaignName,
       sessions: sessions.map((s) => ({ n: s.n, date: s.date, rolls: s.rolls })),
       totals,
-      characters: stats.map((s) => ({
-        name: s.actorName,
-        rolls: s.allRolls,
-        avgD20: s.avgD20,
-        nat20s: s.nat20s,
-        nat1s: s.nat1s,
-        damage: s.damage,
-        healing: s.healing,
+      party: characters.filter((c) => c.kind === "pc"),
+      friendlyNpcs: characters.filter((c) => c.kind === "npc"),
+      monsters: characters.filter((c) => c.kind === "monster"),
+      awards: awards.map(({ key, title, actorName, statLine, kind }) => ({
+        key,
+        title,
+        actorName,
+        statLine,
+        side: kind ?? "pc",
       })),
-      awards: awards.map(({ key, title, actorName, statLine }) => ({ key, title, actorName, statLine })),
       favouriteItems: items.slice(0, 5),
       bestRolls: notables.best,
       worstRolls: notables.worst,
@@ -278,14 +386,23 @@ async function generateNarrative(
     };
     const response = await client.messages.parse({
       model: "claude-opus-4-8",
-      max_tokens: 2000,
+      max_tokens: 2500,
       thinking: { type: "adaptive" },
       system:
         "You write short, fun Discord recaps of D&D sessions based purely on dice statistics. " +
-        "D&D games are silly and so are you: playful, a little dramatic, never mean. Refer to " +
-        "characters by name. Notice the shape of the luck — no crits all night deserves a " +
-        "eulogy, a pile of nat 1s deserves a conspiracy theory, a dead-average d20 deserves " +
-        "suspicion. Do not invent story events — you only know what the dice did. British English.",
+        "D&D games are silly and so are you: playful, a little dramatic, never mean. British English.\n\n" +
+        "Sides matter: `party` are the heroes — root for them. `monsters` are the opposition — " +
+        "their damage is damage the party TOOK, their attacks are threats, their deaths are " +
+        "victories; never narrate a monster as a team player. `friendlyNpcs` are allies. " +
+        "A monster's name often tells you what it is (a Giant Spider is a giant spider, a lich " +
+        "is a lich) — use that flavour.\n\n" +
+        "Read the loadouts: each character lists their attacks (by weapon, with counts), spells " +
+        "cast, features used, skills rolled and saves made. Infer playstyle from them — lots of " +
+        "healing spells reads cleric, Sneak Attack reads rogue, a bow plus nature-y skills " +
+        "reads ranger — and weave the actual names and counts in (\"three Fireballs\", " +
+        "\"Sneak Attack ×5\"). Notice the shape of the luck too: no crits all night deserves a " +
+        "eulogy, a pile of nat 1s a conspiracy theory, a dead-average d20 suspicion. Do not " +
+        "invent story events — you only know what the dice did.",
       messages: [
         {
           role: "user",
@@ -342,10 +459,13 @@ export async function getOrCreateSummary(
     rollDiversity(campaignId, dates),
     notableRolls(campaignId, dates),
   ]);
+  const characters = await characterDetails(campaignId, dates, stats);
   // Death saves already excluded for players via includeHidden: false.
   await recentDeathSaves(campaignId, filters, 6);
 
   const awards = computeAwards(stats, diversity);
+  const kindByName = new Map(characters.map((c) => [c.name, c.kind]));
+  for (const award of awards) award.kind = kindByName.get(award.actorName) ?? "monster";
   // Enrich award stat lines with concrete detail from the notable rolls.
   const bestOf = new Map<string, NotableRoll>();
   for (const n of notables.best) if (!bestOf.has(n.actorName)) bestOf.set(n.actorName, n);
@@ -369,7 +489,7 @@ export async function getOrCreateSummary(
       : null,
   };
 
-  const llm = await generateNarrative(campaignName, picked, slimTotals, stats, awards, items, notables);
+  const llm = await generateNarrative(campaignName, picked, slimTotals, characters, awards, items, notables);
   if (llm) {
     for (const award of awards) {
       award.comment = llm.comments.get(award.key);
