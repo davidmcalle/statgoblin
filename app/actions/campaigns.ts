@@ -12,14 +12,9 @@ import {
   requireUserId,
   touchCampaign,
 } from "@/lib/campaigns";
-import { buildSummaryEmbed, isValidWebhookUrl, postWebhook } from "@/lib/discord";
-import {
-  actorStats,
-  campaignTotals,
-  itemUsage,
-  recentDeathSaves,
-  sessions,
-} from "@/lib/stats";
+import { buildGeneratedSummaryEmbeds, isValidWebhookUrl, postWebhook } from "@/lib/discord";
+import { getOrCreateSummary } from "@/lib/summary";
+import { sessions } from "@/lib/stats";
 
 // Server actions are untrusted entry points (reachable as POSTs without the
 // UI) — every one re-authenticates via Clerk and re-authorizes against the DB.
@@ -83,13 +78,14 @@ export async function updateCampaign(campaignId: string, formData: FormData): Pr
 }
 
 /**
- * Creator-only: post a stat summary of the picked sessions to the campaign's
- * Discord webhook. Sessions are play dates; capped at 10 per summary.
+ * Creator-only: post a generated summary of the picked sessions (up to 10) to
+ * the campaign's Discord webhook. First send generates awards + the Claude
+ * narrative and caches the result; resends reuse the cache verbatim.
  */
 export async function sendDiscordSummary(
   campaignId: string,
   dates: string[],
-): Promise<{ sent: boolean; error?: string }> {
+): Promise<{ sent: boolean; cached?: boolean; error?: string }> {
   const userId = await requireUserId();
   const campaign = await requireCreator(campaignId, userId);
   if (!campaign.discordWebhookUrl) {
@@ -104,30 +100,27 @@ export async function sendDiscordSummary(
     .map((d) => valid.get(d)!);
   if (picked.length === 0) return { sent: false, error: "Pick at least one session" };
 
-  const filters = { dates: picked.map((s) => s.date), includeHidden: false };
-  const [totals, actorStats_, items, deathSaves] = await Promise.all([
-    campaignTotals(campaignId, filters),
-    actorStats(campaignId, filters),
-    itemUsage(campaignId, filters, 5),
-    recentDeathSaves(campaignId, filters, 6),
-  ]);
+  const { payload, cached } = await getOrCreateSummary(campaignId, campaign.name, picked);
+
+  const actors = await prisma.actor.findMany({
+    where: { campaignId, image: { not: "" } },
+    select: { name: true, image: true },
+  });
 
   try {
     await postWebhook(
       campaign.discordWebhookUrl,
-      buildSummaryEmbed({
-        campaignName: campaign.name,
-        sessions: picked,
-        totals,
-        actorStats: actorStats_,
-        items,
-        deathSaves,
-      }),
+      buildGeneratedSummaryEmbeds(
+        campaign.name,
+        campaign.image,
+        payload,
+        new Map(actors.map((a) => [a.name, a.image])),
+      ),
     );
   } catch (e) {
     return { sent: false, error: e instanceof Error ? e.message : "Failed to reach Discord" };
   }
-  return { sent: true };
+  return { sent: true, cached };
 }
 
 /** Creator-only: mint an additional API key; plaintext returned once. */

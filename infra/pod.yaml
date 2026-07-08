@@ -35,6 +35,10 @@ spec:
           value: change-me
         - name: NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY
           value: change-me
+        # Optional: enables the Claude-written narrative in Discord session
+        # summaries. Leave as change-me to send plain stat summaries instead.
+        - name: ANTHROPIC_API_KEY
+          value: change-me
 
   volumes:
     - name: pgdata

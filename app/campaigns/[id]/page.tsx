@@ -133,6 +133,14 @@ export default async function CampaignPage({
   ]);
   const sessionList = await sessions(id);
   const logRows = view === "log" ? await rollLog(id, filters) : [];
+  const summaryKeys = isCreator
+    ? (
+        await prisma.sessionSummary.findMany({
+          where: { campaignId: id },
+          select: { datesKey: true },
+        })
+      ).map((s) => s.datesKey)
+    : [];
 
   // Subject = whatever the grouping axis produces (character or player names).
   const colors = characterColors([...options.actors, ...stats.map((s) => s.actorName)]);
@@ -284,6 +292,7 @@ export default async function CampaignPage({
               campaignId={id}
               sessions={sessionList}
               webhookConfigured={!!campaign.discordWebhookUrl}
+              generatedKeys={summaryKeys}
             />
           </span>
         )}

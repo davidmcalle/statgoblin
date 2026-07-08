@@ -20,10 +20,13 @@ export function SendSummary({
   campaignId,
   sessions,
   webhookConfigured,
+  generatedKeys = [],
 }: {
   campaignId: string;
   sessions: { n: number; date: string }[];
   webhookConfigured: boolean;
+  /** datesKeys of already-generated summaries — resends skip the LLM. */
+  generatedKeys?: string[];
 }) {
   const [open, setOpen] = useState(false);
   const [picked, setPicked] = useState<Set<string>>(new Set());
@@ -31,6 +34,9 @@ export function SendSummary({
   const [pending, startTransition] = useTransition();
 
   if (sessions.length === 0) return null;
+
+  const selectionKey = [...picked].sort().join(",");
+  const alreadyGenerated = generatedKeys.includes(selectionKey);
 
   const toggle = (date: string) => {
     setPicked((prev) => {
@@ -60,7 +66,7 @@ export function SendSummary({
             <DialogTitle>Send session summary</DialogTitle>
             <DialogDescription>
               {webhookConfigured
-                ? `Pick the sessions to summarize (up to ${MAX_SESSIONS}). The stats post to your Discord channel.`
+                ? `Pick the sessions to recap (up to ${MAX_SESSIONS}). The first send writes the summary and awards; resending the same pick reuses it.`
                 : "No webhook set — paste a Discord webhook URL in campaign settings first (channel → Integrations → Webhooks)."}
             </DialogDescription>
           </DialogHeader>
@@ -81,6 +87,11 @@ export function SendSummary({
                           onChange={() => toggle(s.date)}
                         />
                         <span className="font-medium">Session {s.n}</span>
+                        {generatedKeys.includes(s.date) && (
+                          <span className="font-mono text-[10px] tracking-widest text-muted-foreground uppercase">
+                            generated
+                          </span>
+                        )}
                         <span className="ml-auto text-muted-foreground">
                           {new Date(`${s.date}T00:00:00Z`).toLocaleDateString("en-GB", {
                             day: "numeric",
@@ -99,11 +110,16 @@ export function SendSummary({
                     startTransition(async () => {
                       const result = await sendDiscordSummary(campaignId, [...picked]);
                       setStatus(result.sent ? "Sent ✓" : (result.error ?? "Failed"));
-                      if (result.sent) setPicked(new Set());
                     })
                   }
                 >
-                  {pending ? "Sending…" : `Send${picked.size ? ` (${picked.size})` : ""}`}
+                  {pending
+                    ? "Generating…"
+                    : picked.size === 0
+                      ? "Send"
+                      : alreadyGenerated
+                        ? "Send"
+                        : "Generate Summary & Send"}
                 </Button>
                 {status && <span className="text-sm text-muted-foreground">{status}</span>}
               </div>

@@ -1,5 +1,3 @@
-import type { ActorStats, CampaignTotals, DeathSaveRow, ItemUsage, SessionInfo } from "@/lib/stats";
-
 // Discord webhook plumbing for "Send summary". Plain fetch against the
 // campaign's webhook URL — no bot, no OAuth; the GM mints the webhook in
 // their own server and pastes it into settings.
@@ -19,18 +17,6 @@ export function isValidWebhookUrl(url: string): boolean {
   }
 }
 
-export type SummaryData = {
-  campaignName: string;
-  /** The picked sessions, oldest first. */
-  sessions: SessionInfo[];
-  totals: CampaignTotals;
-  actorStats: ActorStats[];
-  items: ItemUsage[];
-  deathSaves: DeathSaveRow[];
-};
-
-const MAX_CHARACTER_FIELDS = 12;
-
 function fmtDate(date: string): string {
   return new Date(`${date}T00:00:00Z`).toLocaleDateString("en-GB", {
     day: "numeric",
@@ -38,10 +24,45 @@ function fmtDate(date: string): string {
   });
 }
 
-/** One stat embed. Discord caps: 25 fields, 6000 chars — we stay well under. */
-export function buildSummaryEmbed(data: SummaryData) {
-  const { campaignName, sessions, totals, actorStats, items, deathSaves } = data;
+export async function postWebhook(
+  webhookUrl: string,
+  embeds: object[],
+): Promise<void> {
+  const res = await fetch(webhookUrl, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ username: "StatGoblin", embeds }),
+  });
+  if (!res.ok) {
+    throw new Error(`Discord rejected the summary (${res.status}). Check the webhook URL.`);
+  }
+}
 
+/** Only public URLs work as Discord thumbnails; Foundry paths are relative. */
+function publicUrl(url: string | null | undefined): string | undefined {
+  return url && /^https?:\/\//.test(url) ? url : undefined;
+}
+
+const EMBED_COLOR = 0x3fa284;
+
+/**
+ * The generated-summary message: one header embed (campaign image, session
+ * label, narrative, headline stats) plus one small embed per award carrying
+ * the character's portrait and the LLM's commentary. Discord caps a message
+ * at 10 embeds — header + up to 9 awards.
+ */
+export function buildGeneratedSummaryEmbeds(
+  campaignName: string,
+  campaignImage: string,
+  payload: {
+    sessions: { n: number; date: string }[];
+    totals: { totalRolls: number; nat20s: number; nat1s: number; avgD20: number | null };
+    awards: { title: string; actorName: string; statLine: string; comment?: string }[];
+    narrative: string | null;
+  },
+  actorImages: Map<string, string>,
+): object[] {
+  const { sessions, totals, awards, narrative } = payload;
   const sessionLabel =
     sessions.length === 1
       ? `Session ${sessions[0].n} — ${fmtDate(sessions[0].date)}`
@@ -56,81 +77,25 @@ export function buildSummaryEmbed(data: SummaryData) {
     .filter(Boolean)
     .join(" · ");
 
-  const fields: { name: string; value: string; inline?: boolean }[] = [];
-
-  for (const s of actorStats.slice(0, MAX_CHARACTER_FIELDS)) {
-    const bits = [
-      `${s.allRolls} rolls`,
-      s.avgD20 !== null ? `avg d20 ${s.avgD20.toFixed(1)}` : null,
-      `${s.nat20s}× nat 20 / ${s.nat1s}× nat 1`,
-      s.damage ? `${s.damage} dmg` : null,
-      s.healing ? `${s.healing} heal` : null,
-    ].filter(Boolean);
-    fields.push({ name: s.actorName, value: bits.join(" · "), inline: false });
-  }
-  if (actorStats.length > MAX_CHARACTER_FIELDS) {
-    fields.push({
-      name: "…and more",
-      value: `${actorStats.length - MAX_CHARACTER_FIELDS} other creatures rolled dice too.`,
-    });
-  }
-
-  const notables: string[] = [];
-  if (totals.highest) {
-    notables.push(
-      `Highest d20 total: **${totals.highest.total}** by ${totals.highest.actorName ?? "someone"}`,
-    );
-  }
-  const luckiest = actorStats
-    .filter((s) => s.d20Rolls >= 10)
-    .sort((a, b) => b.nat20s / b.d20Rolls - a.nat20s / a.d20Rolls)[0];
-  if (luckiest && luckiest.nat20s > 0) {
-    notables.push(
-      `Luckiest: **${luckiest.actorName}** (${((luckiest.nat20s / luckiest.d20Rolls) * 100).toFixed(0)}% nat 20 rate)`,
-    );
-  }
-  const bruiser = [...actorStats].sort((a, b) => b.damage - a.damage)[0];
-  if (bruiser && bruiser.damage > 0) {
-    notables.push(`Most damage: **${bruiser.actorName}** (${bruiser.damage})`);
-  }
-  const favourite = items[0];
-  if (favourite) {
-    notables.push(`Most used: **${favourite.itemName}** (×${favourite.uses})`);
-  }
-  if (notables.length) fields.push({ name: "Notables", value: notables.join("\n") });
-
-  if (deathSaves.length) {
-    fields.push({
-      name: "Death saves",
-      value: deathSaves
-        .slice(0, 6)
-        .map((d) => {
-          const flavor = d.d20 === 20 ? " — nat 20!" : d.d20 === 1 ? " — nat 1, two failures" : "";
-          return `${d.actorName ?? "—"} rolled ${d.total ?? "?"}${flavor}`;
-        })
-        .join("\n"),
-    });
-  }
-
-  return {
+  const header: Record<string, unknown> = {
     title: `${campaignName} — ${sessionLabel}`,
-    description: headline,
-    color: 0x3fa284,
-    fields,
+    description: [narrative, headline].filter(Boolean).join("\n\n").slice(0, 4000),
+    color: EMBED_COLOR,
     footer: { text: "StatGoblin" },
   };
-}
+  const image = publicUrl(campaignImage);
+  if (image) header.thumbnail = { url: image };
 
-export async function postWebhook(
-  webhookUrl: string,
-  embed: ReturnType<typeof buildSummaryEmbed>,
-): Promise<void> {
-  const res = await fetch(webhookUrl, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ username: "StatGoblin", embeds: [embed] }),
+  const awardEmbeds = awards.slice(0, 9).map((a) => {
+    const embed: Record<string, unknown> = {
+      author: { name: `${a.title} — ${a.actorName}` },
+      description: [a.comment, `*${a.statLine}*`].filter(Boolean).join("\n"),
+      color: EMBED_COLOR,
+    };
+    const portrait = publicUrl(actorImages.get(a.actorName));
+    if (portrait) embed.thumbnail = { url: portrait };
+    return embed;
   });
-  if (!res.ok) {
-    throw new Error(`Discord rejected the summary (${res.status}). Check the webhook URL.`);
-  }
+
+  return [header, ...awardEmbeds];
 }

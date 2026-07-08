@@ -181,6 +181,21 @@ model Actor {
   @@map("actors")
 }
 
+// Generated Discord session summaries, cached so a resend never regenerates
+// (or re-bills) the narrative. Keyed by the exact set of session dates the
+// GM picked; payload holds the narrative, awards and stat packet.
+model SessionSummary {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  campaignId String   @map("campaign_id") @db.Uuid
+  // Sorted session dates joined with "," — the cache key for a selection.
+  datesKey   String   @map("dates_key")
+  payload    Json
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@unique([campaignId, datesKey])
+  @@map("session_summaries")
+}
+
 // Parser bookkeeping: bump PARSER_VERSION in lib/derive to mark all previously
 // derived rows stale; reprocess rebuilds campaigns whose version lags.
 model DeriveState {
