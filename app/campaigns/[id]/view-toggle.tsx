@@ -18,17 +18,27 @@ export function ViewToggle({ view }: { view: "log" | "charts" }) {
   };
 
   const base =
-    "flex items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-sm transition-colors";
-  const active = "bg-background font-semibold ring-1 ring-border";
-  const idle = "text-muted-foreground hover:text-foreground";
+    "-mb-px flex items-center gap-1.5 border-b-2 px-3 py-2.5 text-sm transition-colors";
+  const active = "border-primary font-semibold text-foreground";
+  const idle = "border-transparent text-muted-foreground hover:text-foreground";
 
   return (
-    // Full-width halves on phones; compact inline pill on desktop.
-    <div className="grid w-full grid-cols-2 rounded-lg border bg-muted p-1 sm:inline-flex sm:w-auto">
-      <button className={`${base} ${view === "charts" ? active : idle}`} onClick={() => set("charts")}>
+    // Underline tabs on a hairline — reads as a section divider, not a widget.
+    <div role="tablist" className="flex border-b border-border">
+      <button
+        role="tab"
+        aria-selected={view === "charts"}
+        className={`${base} ${view === "charts" ? active : idle}`}
+        onClick={() => set("charts")}
+      >
         <ChartColumn size={15} /> Charts
       </button>
-      <button className={`${base} ${view === "log" ? active : idle}`} onClick={() => set("log")}>
+      <button
+        role="tab"
+        aria-selected={view === "log"}
+        className={`${base} ${view === "log" ? active : idle}`}
+        onClick={() => set("log")}
+      >
         <ScrollText size={15} /> Rolls
       </button>
     </div>
