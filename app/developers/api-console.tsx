@@ -58,6 +58,7 @@ const ENDPOINTS: EndpointDef[] = [
       { name: "session", type: "date", desc: "One play date", placeholder: "2026-07-06" },
       { name: "from", type: "date", desc: "Start date, inclusive", placeholder: "2026-07-01" },
       { name: "to", type: "date", desc: "End date, inclusive", placeholder: "2026-07-31" },
+      { name: "updated_since", type: "ISO datetime", desc: "Only rows written or updated since — for incremental sync. Orders by update time; key rows by (messageId, rollIndex), reprocessing recreates ids.", placeholder: "2026-07-06T00:00:00Z" },
       { name: "limit", type: "1–500", desc: "Page size (default 100)", placeholder: "100" },
       { name: "offset", type: "number", desc: "Pagination offset", placeholder: "0" },
     ],

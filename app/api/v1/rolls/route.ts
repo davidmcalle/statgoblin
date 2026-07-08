@@ -12,6 +12,8 @@ const querySchema = z.object({
   session: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
   from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
   to: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  /** ISO datetime — rows written/updated since then, for incremental sync. */
+  updated_since: z.iso.datetime().optional(),
   limit: z.coerce.number().int().min(1).max(500).default(100),
   offset: z.coerce.number().int().min(0).default(0),
 });
@@ -45,6 +47,7 @@ export async function GET(request: Request) {
     campaignId,
     deletedAt: null,
     isHidden: false,
+    ...(q.updated_since ? { updatedAt: { gte: new Date(q.updated_since) } } : {}),
     ...(q.actor ? { actorName: q.actor } : {}),
     ...(q.type ? { rollType: q.type } : {}),
     ...(actorFids ? { actorFid: { in: actorFids } } : {}),
@@ -64,7 +67,10 @@ export async function GET(request: Request) {
     prisma.roll.count({ where }),
     prisma.roll.findMany({
       where,
-      orderBy: [{ rolledAt: "asc" }, { rollIndex: "asc" }],
+      // Incremental consumers page by update time; everyone else by roll time.
+      orderBy: q.updated_since
+        ? [{ updatedAt: "asc" as const }, { rollIndex: "asc" as const }]
+        : [{ rolledAt: "asc" as const }, { rollIndex: "asc" as const }],
       skip: q.offset,
       take: q.limit,
       select: {
@@ -96,6 +102,8 @@ export async function GET(request: Request) {
         ability: true,
         skill: true,
         rolledAt: true,
+        createdAt: true,
+        updatedAt: true,
       },
     }),
   ]);

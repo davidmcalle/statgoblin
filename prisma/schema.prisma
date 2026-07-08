@@ -140,6 +140,10 @@ model Roll {
 
   rolledAt  DateTime  @map("rolled_at") @db.Timestamptz(6)
   deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
+  // Row bookkeeping for the read API's incremental loads. Reprocessing
+  // recreates rows, so (messageId, rollIndex) — not id — is the stable key.
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   rawEvent RawEvent @relation(fields: [rawEventId], references: [id], onDelete: Cascade)
 
@@ -147,6 +151,7 @@ model Roll {
   @@index([campaignId, rolledAt])
   @@index([campaignId, actorFid])
   @@index([campaignId, rollType])
+  @@index([campaignId, updatedAt])
   @@map("rolls")
 }
 
