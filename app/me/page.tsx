@@ -28,11 +28,28 @@ export default async function MePage() {
 
   return (
     <main className="mx-auto w-full max-w-4xl flex-1 space-y-8 p-4 sm:p-6">
-      <div>
-        <h1 className="text-2xl font-bold">Your characters</h1>
-        <p className="text-sm text-muted-foreground">
-          Every character assigned to you, across all your campaigns
-        </p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-bold">Your characters</h1>
+          <p className="text-sm text-muted-foreground">
+            Every character assigned to you, across all your campaigns
+          </p>
+        </div>
+        <div className="flex items-center gap-2 text-sm">
+          {/* Plain link: the route streams a JSON attachment. */}
+          <a
+            href="/api/me/export"
+            className="rounded-md border border-input px-3 py-1.5 hover:bg-muted"
+          >
+            Export my data
+          </a>
+          <Link
+            href="/developers"
+            className="rounded-md px-2 py-1.5 text-muted-foreground hover:text-foreground"
+          >
+            Developer API
+          </Link>
+        </div>
       </div>
 
       {characters.length === 0 ? (

@@ -6,6 +6,8 @@ import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server";
 const isPublicRoute = createRouteMatcher([
   "/",
   "/api/ingest",
+  // Read API authenticates itself with the campaign key pair, not Clerk.
+  "/api/v1/(.*)",
   "/sign-in(.*)",
   "/sign-up(.*)",
   "/join/(.*)",
