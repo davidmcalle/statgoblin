@@ -57,7 +57,7 @@ export async function GET(request: Request) {
     ...(q.type ? { rollType: q.type } : {}),
     ...(actorFids ? { actorFid: { in: actorFids } } : {}),
     ...(q.session
-      ? { rolledAt: { gte: day(q.session), lt: new Date(day(q.session).getTime() + 86_400_000) } }
+      ? { sessionDate: day(q.session) }
       : q.from || q.to
         ? {
             rolledAt: {
@@ -108,6 +108,7 @@ export async function GET(request: Request) {
         skill: true,
         isHidden: true,
         rolledAt: true,
+        sessionDate: true,
         deletedAt: true,
         createdAt: true,
         updatedAt: true,

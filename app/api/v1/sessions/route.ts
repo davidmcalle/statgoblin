@@ -28,7 +28,7 @@ export async function GET(request: Request) {
 
   const actorFids = q.kind ? await actorFidsForKind(campaignId, q.kind) : undefined;
   const rows = await prisma.roll.groupBy({
-    by: ["rolledAt"],
+    by: ["sessionDate"],
     where: {
       campaignId,
       deletedAt: null,
@@ -39,7 +39,7 @@ export async function GET(request: Request) {
   });
   const byDay = new Map<string, number>();
   for (const r of rows) {
-    const dayKey = r.rolledAt.toISOString().slice(0, 10);
+    const dayKey = r.sessionDate.toISOString().slice(0, 10);
     byDay.set(dayKey, (byDay.get(dayKey) ?? 0) + r._count._all);
   }
 

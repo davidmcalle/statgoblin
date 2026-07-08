@@ -1,4 +1,5 @@
 import { SKILL_ABILITY } from "@/lib/dnd5e-meta";
+import { sessionDayFrom, sessionDayOf } from "@/lib/session-day";
 import type { ActorKind } from "@/lib/kind";
 import type {
   ActorStats,
@@ -164,6 +165,7 @@ function buildRolls(): FixtureRoll[] {
     rolls.push({
       id: `uat-roll-${++id}`,
       rolledAt: when,
+      sessionDate: sessionDayOf(when),
       actorName: actor.name,
       actorFid: actor.fid,
       authorName: actor.player ?? "Dana",
@@ -358,16 +360,15 @@ function subjectOf(r: FixtureRoll, by: GroupBy): string | null {
 }
 
 export function uatFilter(f: UatFilters): FixtureRoll[] {
-  const sessionStart = f.session ? new Date(`${f.session}T00:00:00Z`) : null;
+  const sessionDay = f.session ? sessionDayFrom(f.session).getTime() : null;
   const cutoff = f.days ? Date.now() - f.days * 86_400_000 : null;
   return UAT_ROLLS.filter((r) => {
     if (f.actor && r.actorName !== f.actor) return false;
     if (f.type && r.rollType !== f.type) return false;
     if (f.kind && r.kind !== f.kind) return false;
     if (!f.includeHidden && r.isHidden) return false;
-    if (sessionStart) {
-      const t = r.rolledAt.getTime();
-      if (t < sessionStart.getTime() || t >= sessionStart.getTime() + 86_400_000) return false;
+    if (sessionDay !== null) {
+      if (r.sessionDate.getTime() !== sessionDay) return false;
     } else if (cutoff && r.rolledAt.getTime() <= cutoff) {
       return false;
     }
@@ -378,7 +379,7 @@ export function uatFilter(f: UatFilters): FixtureRoll[] {
 export function uatSessions(): SessionInfo[] {
   const byDay = new Map<string, number>();
   for (const r of UAT_ROLLS) {
-    const day = r.rolledAt.toISOString().slice(0, 10);
+    const day = r.sessionDate.toISOString().slice(0, 10);
     byDay.set(day, (byDay.get(day) ?? 0) + 1);
   }
   return [...byDay.entries()]

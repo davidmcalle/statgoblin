@@ -15,6 +15,7 @@ import {
 import { buildGeneratedSummaryEmbeds, isValidWebhookUrl, postWebhook } from "@/lib/discord";
 import { getOrCreateSummary } from "@/lib/summary";
 import { sessions } from "@/lib/stats";
+import { sessionDayFrom } from "@/lib/session-day";
 
 // Server actions are untrusted entry points (reachable as POSTs without the
 // UI) — every one re-authenticates via Clerk and re-authorizes against the DB.
@@ -256,15 +257,12 @@ export async function clearRolls(
     if (!owned.has(actorFid)) throw new Error("Not your character");
   }
 
-  const dayStart = date ? new Date(`${date}T00:00:00Z`) : undefined;
   const targets = await prisma.roll.findMany({
     where: {
       campaignId,
       deletedAt: null,
       ...(actorFid ? { actorFid } : {}),
-      ...(dayStart
-        ? { rolledAt: { gte: dayStart, lt: new Date(dayStart.getTime() + 86_400_000) } }
-        : {}),
+      ...(date ? { sessionDate: sessionDayFrom(date) } : {}),
     },
     select: { rawEventId: true },
     distinct: ["rawEventId"],
@@ -316,6 +314,46 @@ export async function removeMember(campaignId: string, memberUserId: string): Pr
   ]);
   await touchCampaign(campaignId);
   revalidatePath(`/campaigns/${campaignId}`);
+}
+
+/**
+ * Creator-only: move the selected rolls' messages to a different session day.
+ * The override lives on the raw event, so reprocessing preserves it; whole
+ * messages move together (an attack's damage rolls follow it).
+ */
+export async function assignRollsToSession(
+  campaignId: string,
+  rollIds: string[],
+  date: string,
+): Promise<{ moved: number }> {
+  const userId = await requireUserId();
+  await requireCreator(campaignId, userId);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new Error("Invalid session date");
+  const ids = rollIds.slice(0, 500);
+  if (ids.length === 0) return { moved: 0 };
+
+  const targets = await prisma.roll.findMany({
+    where: { campaignId, id: { in: ids } },
+    select: { rawEventId: true },
+    distinct: ["rawEventId"],
+  });
+  const eventIds = targets.map((t) => t.rawEventId);
+  if (eventIds.length === 0) return { moved: 0 };
+
+  const day = sessionDayFrom(date);
+  await prisma.$transaction([
+    prisma.rawEvent.updateMany({
+      where: { id: { in: eventIds } },
+      data: { sessionOverride: day },
+    }),
+    prisma.roll.updateMany({
+      where: { rawEventId: { in: eventIds } },
+      data: { sessionDate: day },
+    }),
+  ]);
+  await touchCampaign(campaignId);
+  revalidatePath(`/campaigns/${campaignId}`);
+  return { moved: eventIds.length };
 }
 
 /**

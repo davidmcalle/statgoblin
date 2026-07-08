@@ -59,10 +59,11 @@ export function buildGeneratedSummaryEmbeds(
     totals: { totalRolls: number; nat20s: number; nat1s: number; avgD20: number | null };
     awards: { title: string; actorName: string; statLine: string; comment?: string }[];
     narrative: string | null;
+    highlights?: string[];
   },
   actorImages: Map<string, string>,
 ): object[] {
-  const { sessions, totals, awards, narrative } = payload;
+  const { sessions, totals, awards, narrative, highlights } = payload;
   const sessionLabel =
     sessions.length === 1
       ? `Session ${sessions[0].n} — ${fmtDate(sessions[0].date)}`
@@ -83,6 +84,11 @@ export function buildGeneratedSummaryEmbeds(
     color: EMBED_COLOR,
     footer: { text: "StatGoblin" },
   };
+  if (highlights?.length) {
+    header.fields = [
+      { name: "Highlights", value: highlights.map((h) => `• ${h}`).join("\n").slice(0, 1024) },
+    ];
+  }
   const image = publicUrl(campaignImage);
   if (image) header.thumbnail = { url: image };
 

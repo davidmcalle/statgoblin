@@ -318,11 +318,13 @@ export default async function CampaignPage({
 
       {view === "log" && (
         <RollLog
+          campaignId={id}
           rows={logRows}
           colors={colors}
           images={new Map(actors.filter((a) => a.image).map((a) => [a.name, a.image]))}
           isCreator={isCreator}
           ownedFids={actors.filter((a) => a.assignedUserId === userId).map((a) => a.foundryActorId)}
+          sessionDates={sessionList.map((s) => s.date)}
         />
       )}
 

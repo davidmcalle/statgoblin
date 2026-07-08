@@ -2,6 +2,7 @@ import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/db/prisma";
 import { effectiveKind } from "@/lib/kind";
 import { SKILL_ABILITY } from "@/lib/dnd5e-meta";
+import { sessionDayFrom } from "@/lib/session-day";
 
 // Dashboard aggregates over the derived rolls table, all filterable by
 // character, roll type, and recency. Raw SQL where Prisma's groupBy can't
@@ -55,17 +56,12 @@ function sqlFilters(campaignId: string, f: StatFilters): Prisma.Sql {
     ${f.type ? Prisma.sql`AND roll_type = ${f.type}` : Prisma.empty}
     ${f.actorFids ? Prisma.sql`AND actor_fid = ANY(${f.actorFids})` : Prisma.empty}
     ${f.includeHidden ? Prisma.empty : Prisma.sql`AND is_hidden = false`}
-    ${f.dates?.length ? Prisma.sql`AND rolled_at::date = ANY(${f.dates}::date[])` : Prisma.empty}
-    ${!f.dates?.length && f.session ? Prisma.sql`AND rolled_at::date = ${f.session}::date` : Prisma.empty}
+    ${f.dates?.length ? Prisma.sql`AND session_date = ANY(${f.dates}::date[])` : Prisma.empty}
+    ${!f.dates?.length && f.session ? Prisma.sql`AND session_date = ${f.session}::date` : Prisma.empty}
     ${f.days ? Prisma.sql`AND rolled_at > now() - make_interval(days => ${f.days})` : Prisma.empty}`;
 }
 
 function whereFilters(campaignId: string, f: StatFilters) {
-  const sessionStart = f.session ? new Date(`${f.session}T00:00:00Z`) : undefined;
-  const dayRange = (date: string) => {
-    const start = new Date(`${date}T00:00:00Z`);
-    return { rolledAt: { gte: start, lt: new Date(start.getTime() + 86_400_000) } };
-  };
   return {
     campaignId,
     deletedAt: null,
@@ -74,9 +70,9 @@ function whereFilters(campaignId: string, f: StatFilters) {
     ...(f.actorFids ? { actorFid: { in: f.actorFids } } : {}),
     ...(f.includeHidden ? {} : { isHidden: false }),
     ...(f.dates?.length
-      ? { OR: f.dates.map(dayRange) }
-      : sessionStart
-        ? { rolledAt: { gte: sessionStart, lt: new Date(sessionStart.getTime() + 86_400_000) } }
+      ? { sessionDate: { in: f.dates.map(sessionDayFrom) } }
+      : f.session
+        ? { sessionDate: sessionDayFrom(f.session) }
         : f.days
           ? { rolledAt: { gt: new Date(Date.now() - f.days * 86_400_000) } }
           : {}),
@@ -91,7 +87,7 @@ export type SessionInfo = { n: number; date: string; rolls: number };
  */
 export async function sessions(campaignId: string): Promise<SessionInfo[]> {
   const rows = await prisma.$queryRaw<{ day: Date; rolls: bigint }[]>`
-    SELECT rolled_at::date AS day, COUNT(*) AS rolls
+    SELECT session_date AS day, COUNT(*) AS rolls
     FROM rolls
     WHERE campaign_id = ${campaignId}::uuid AND deleted_at IS NULL
     GROUP BY 1
@@ -527,6 +523,7 @@ export async function myCharacters(userId: string): Promise<MyCharacterRow[]> {
 export type RollLogRow = {
   id: string;
   rolledAt: Date;
+  sessionDate: Date;
   rollType: string;
   actorName: string | null;
   actorFid: string | null;
@@ -559,6 +556,7 @@ export async function rollLog(
     select: {
       id: true,
       rolledAt: true,
+      sessionDate: true,
       rollType: true,
       actorName: true,
       actorFid: true,

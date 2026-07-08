@@ -35,12 +35,14 @@ export async function GET(request: Request) {
         campaignId,
         deletedAt: null,
         actorFid: { not: null },
-        rolledAt: q.session
-          ? { gte: day(q.session), lt: new Date(day(q.session).getTime() + 86_400_000) }
+        ...(q.session
+          ? { sessionDate: day(q.session) }
           : {
-              ...(q.from ? { gte: day(q.from) } : {}),
-              ...(q.to ? { lt: new Date(day(q.to).getTime() + 86_400_000) } : {}),
-            },
+              rolledAt: {
+                ...(q.from ? { gte: day(q.from) } : {}),
+                ...(q.to ? { lt: new Date(day(q.to).getTime() + 86_400_000) } : {}),
+              },
+            }),
       },
       distinct: ["actorFid"],
       select: { actorFid: true },

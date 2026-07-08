@@ -1,3 +1,6 @@
+"use client";
+
+import { useState, useTransition } from "react";
 import {
   Activity,
   BookOpen,
@@ -30,6 +33,9 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { ABILITY_NAMES, SKILL_NAMES } from "@/lib/dnd5e-meta";
+import { assignRollsToSession } from "@/app/actions/campaigns";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { DeleteRollButton } from "./delete-roll-button";
 import type { RollLogRow } from "@/lib/stats";
 
@@ -144,19 +150,39 @@ function Die({ die }: { die: { f: number; r: number } }) {
 }
 
 export function RollLog({
+  campaignId,
   rows,
   colors,
   images,
   isCreator = false,
   ownedFids = [],
+  sessionDates = [],
 }: {
+  campaignId?: string;
   rows: RollLogRow[];
   colors: Map<string, string>;
   images: Map<string, string>;
   isCreator?: boolean;
   ownedFids?: string[];
+  /** Existing session dates, offered as reassignment targets. */
+  sessionDates?: string[];
 }) {
   const owned = new Set(ownedFids);
+  // GM bulk reassignment: pick rolls, move their whole messages to a session.
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [targetDate, setTargetDate] = useState("");
+  const [pending, startTransition] = useTransition();
+  const canSelect = isCreator && !!campaignId;
+
+  const toggleSelected = (id: string) => {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
   if (rows.length === 0) {
     return (
       <p className="py-12 text-center text-muted-foreground">
@@ -165,11 +191,17 @@ export function RollLog({
     );
   }
 
-  // Group into day sections, newest day first (rows arrive newest-first).
+  // Group into session-day sections (6am boundary), newest first.
   const groups: { label: string; rows: RollLogRow[] }[] = [];
   for (const row of rows) {
-    const label = row.rolledAt
-      .toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long", year: "numeric" })
+    const label = row.sessionDate
+      .toLocaleDateString("en-GB", {
+        weekday: "long",
+        day: "numeric",
+        month: "long",
+        year: "numeric",
+        timeZone: "UTC",
+      })
       .toUpperCase();
     const last = groups[groups.length - 1];
     if (last?.label === label) last.rows.push(row);
@@ -217,6 +249,15 @@ export function RollLog({
               return (
                 <li key={r.id} className="py-3 sm:py-3.5">
                   <div className="flex items-center gap-3 sm:gap-4">
+                    {canSelect && (
+                      <input
+                        type="checkbox"
+                        className="shrink-0 accent-primary"
+                        aria-label="Select roll"
+                        checked={selected.has(r.id)}
+                        onChange={() => toggleSelected(r.id)}
+                      />
+                    )}
                     {/* Identity color rides the avatar's border, matching the
                         character's series color in the charts. */}
                     {r.actorName && images.get(r.actorName) ? (
@@ -287,6 +328,42 @@ export function RollLog({
           </ul>
         </section>
       ))}
+
+      {canSelect && selected.size > 0 && (
+        <div className="sticky bottom-3 z-10 mx-auto flex w-fit max-w-full flex-wrap items-center gap-2 rounded-md border border-border bg-popover px-3 py-2 text-sm">
+          <span className="font-medium">
+            {selected.size} roll{selected.size === 1 ? "" : "s"}
+          </span>
+          <span className="text-muted-foreground">→ session</span>
+          <Input
+            type="date"
+            value={targetDate}
+            onChange={(e) => setTargetDate(e.target.value)}
+            list="session-dates"
+            className="w-40"
+          />
+          <datalist id="session-dates">
+            {sessionDates.map((d) => (
+              <option key={d} value={d} />
+            ))}
+          </datalist>
+          <Button
+            size="sm"
+            disabled={pending || !targetDate}
+            onClick={() =>
+              startTransition(async () => {
+                await assignRollsToSession(campaignId!, [...selected], targetDate);
+                setSelected(new Set());
+              })
+            }
+          >
+            {pending ? "Moving…" : "Move"}
+          </Button>
+          <Button variant="ghost" size="sm" onClick={() => setSelected(new Set())}>
+            Cancel
+          </Button>
+        </div>
+      )}
     </div>
   );
 }

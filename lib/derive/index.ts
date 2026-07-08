@@ -1,5 +1,6 @@
 import type { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/db/prisma";
+import { sessionDayOf } from "@/lib/session-day";
 import { PARSER_VERSION, parseActor, parseRolls } from "./parse";
 
 /**
@@ -37,6 +38,9 @@ export async function deriveRawEvent(event: { id: string }): Promise<void> {
           ...r,
           dice: (r.dice ?? undefined) as Prisma.InputJsonValue | undefined,
           isHidden: r.rollType === "death" && hiddenFrom !== null && r.rolledAt >= hiddenFrom,
+          // GM reassignment (on the raw event, so it survives reprocess)
+          // wins over the 6am-boundary play date.
+          sessionDate: fresh.sessionOverride ?? sessionDayOf(r.rolledAt),
           campaignId: fresh.campaignId,
           rawEventId: fresh.id,
           messageId: fresh.messageId,

@@ -139,7 +139,10 @@ model Roll {
   isHidden Boolean @default(false) @map("is_hidden")
 
   rolledAt  DateTime  @map("rolled_at") @db.Timestamptz(6)
-  deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
+  // Effective session day: raw event override, else the 6am-to-6am play date
+  // ((rolled_at - 6h)::date) — games cross midnight, rarely 6am.
+  sessionDate DateTime  @map("session_date") @db.Date
+  deletedAt   DateTime? @map("deleted_at") @db.Timestamptz(6)
   // Row bookkeeping for the read API's incremental loads. Reprocessing
   // recreates rows, so (messageId, rollIndex) — not id — is the stable key.
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
@@ -149,6 +152,7 @@ model Roll {
 
   @@unique([rawEventId, rollIndex])
   @@index([campaignId, rolledAt])
+  @@index([campaignId, sessionDate])
   @@index([campaignId, actorFid])
   @@index([campaignId, rollType])
   @@index([campaignId, updatedAt])
@@ -221,6 +225,9 @@ model RawEvent {
   firstSeenAt   DateTime  @default(now()) @map("first_seen_at") @db.Timestamptz(6)
   updatedAt     DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
   deletedAt     DateTime? @map("deleted_at") @db.Timestamptz(6)
+  // GM reassignment: pin this message's rolls to a different session day.
+  // Lives on the raw event so reprocessing preserves it.
+  sessionOverride DateTime? @map("session_override") @db.Date
 
   campaign Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
   rolls    Roll[]

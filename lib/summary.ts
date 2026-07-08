@@ -2,6 +2,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { z } from "zod";
 import { prisma } from "@/lib/db/prisma";
+import { sessionDayFrom } from "@/lib/session-day";
 import {
   actorStats,
   campaignTotals,
@@ -35,6 +36,7 @@ export type SummaryPayload = {
   };
   awards: Award[];
   narrative: string | null;
+  highlights?: string[];
   generatedAt: string;
 };
 
@@ -125,10 +127,7 @@ async function rollDiversity(campaignId: string, dates: string[]): Promise<Map<s
       deletedAt: null,
       isHidden: false,
       actorName: { not: null },
-      OR: dates.map((d) => {
-        const start = new Date(`${d}T00:00:00Z`);
-        return { rolledAt: { gte: start, lt: new Date(start.getTime() + 86_400_000) } };
-      }),
+      sessionDate: { in: dates.map(sessionDayFrom) },
     },
     select: { actorName: true, rollType: true, skill: true },
   });
@@ -153,6 +152,13 @@ const narrativeSchema = z.object({
       }),
     )
     .describe("One comment per award, matched by key"),
+  highlights: z
+    .array(z.string())
+    .describe(
+      "2-4 extra fun observations about the dice that the awards missed — a total crit drought, " +
+        "a flood of nat 1s, one character hogging all the healing, a suspiciously fair d20, " +
+        "whatever stands out. One sentence each, silly encouraged.",
+    ),
 });
 
 /**
@@ -167,7 +173,7 @@ async function generateNarrative(
   stats: ActorStats[],
   awards: Award[],
   items: { itemName: string; uses: number }[],
-): Promise<{ narrative: string; comments: Map<string, string> } | null> {
+): Promise<{ narrative: string; comments: Map<string, string>; highlights: string[] } | null> {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey || apiKey === "change-me") return null;
   try {
@@ -194,8 +200,10 @@ async function generateNarrative(
       thinking: { type: "adaptive" },
       system:
         "You write short, fun Discord recaps of D&D sessions based purely on dice statistics. " +
-        "Table-friendly tone: playful, a little dramatic, never mean. Refer to characters by name. " +
-        "Do not invent story events — you only know what the dice did. British English.",
+        "D&D games are silly and so are you: playful, a little dramatic, never mean. Refer to " +
+        "characters by name. Notice the shape of the luck — no crits all night deserves a " +
+        "eulogy, a pile of nat 1s deserves a conspiracy theory, a dead-average d20 deserves " +
+        "suspicion. Do not invent story events — you only know what the dice did. British English.",
       messages: [
         {
           role: "user",
@@ -209,6 +217,7 @@ async function generateNarrative(
     return {
       narrative: parsed.narrative,
       comments: new Map(parsed.awardComments.map((c) => [c.key, c.comment])),
+      highlights: parsed.highlights,
     };
   } catch {
     // Narrative is garnish — never block the summary on the LLM.
@@ -263,6 +272,7 @@ export async function getOrCreateSummary(
     totals: slimTotals,
     awards,
     narrative: llm?.narrative ?? null,
+    highlights: llm?.highlights ?? [],
     generatedAt: new Date().toISOString(),
   };
 
