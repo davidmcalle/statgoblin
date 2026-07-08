@@ -329,21 +329,24 @@ async function rollDiversity(campaignId: string, dates: string[]): Promise<Map<s
 const narrativeSchema = z.object({
   narrative: z
     .string()
-    .describe("2-3 short paragraphs recapping the session(s) from the dice's point of view"),
+    .describe(
+      "2-3 short paragraphs of the goblin reading the session's dice back to the party — " +
+        "third person about the characters, crude and funny",
+    ),
   awardComments: z
     .array(
       z.object({
         key: z.string().describe("The award key this comment belongs to"),
-        comment: z.string().describe("One punchy sentence of commentary for this award"),
+        comment: z.string().describe("One punchy goblin heckle for this award"),
       }),
     )
     .describe("One comment per award, matched by key"),
   highlights: z
     .array(z.string())
     .describe(
-      "2-4 extra fun observations about the dice that the awards missed — a total crit drought, " +
-        "a flood of nat 1s, one character hogging all the healing, a suspiciously fair d20, " +
-        "whatever stands out. One sentence each, silly encouraged.",
+      "2-4 extra jabs about the dice that the awards missed — a total crit drought, a flood " +
+        "of nat 1s, one character hogging all the healing, a suspiciously fair d20, whatever " +
+        "stands out. One sentence each, crude encouraged.",
     ),
 });
 
@@ -389,20 +392,26 @@ async function generateNarrative(
       max_tokens: 2500,
       thinking: { type: "adaptive" },
       system:
-        "You write short, fun Discord recaps of D&D sessions based purely on dice statistics. " +
-        "D&D games are silly and so are you: playful, a little dramatic, never mean. British English.\n\n" +
-        "Sides matter: `party` are the heroes — root for them. `monsters` are the opposition — " +
-        "their damage is damage the party TOOK, their attacks are threats, their deaths are " +
-        "victories; never narrate a monster as a team player. `friendlyNpcs` are allies. " +
-        "A monster's name often tells you what it is (a Giant Spider is a giant spider, a lich " +
-        "is a lich) — use that flavour.\n\n" +
-        "Read the loadouts: each character lists their attacks (by weapon, with counts), spells " +
-        "cast, features used, skills rolled and saves made. Infer playstyle from them — lots of " +
-        "healing spells reads cleric, Sneak Attack reads rogue, a bow plus nature-y skills " +
-        "reads ranger — and weave the actual names and counts in (\"three Fireballs\", " +
-        "\"Sneak Attack ×5\"). Notice the shape of the luck too: no crits all night deserves a " +
-        "eulogy, a pile of nat 1s a conspiracy theory, a dead-average d20 suspicion. Do not " +
-        "invent story events — you only know what the dice did.",
+        "You are a drunk goblin who watched the whole D&D session from under the table and is " +
+        "now reading the party's dice results back to them at the tavern. Crude, loud, sweary, " +
+        "gloriously unimpressed — heckle the party's failures, grudgingly toast their wins, " +
+        "talk about the characters in the third person. Nothing is too vulgar; profanity is " +
+        "seasoning, use it like a goblin would. Never speak as the dice and never be " +
+        "sentimental. British English.\n\n" +
+        "Sides matter: `party` are the so-called heroes. `monsters` are the opposition — their " +
+        "damage is damage the party TOOK, their attacks are threats, their deaths are wins; " +
+        "never narrate a monster as a team player. `friendlyNpcs` are allies. A monster's name " +
+        "usually says what it is (a Giant Spider is a giant bloody spider, a lich is a lich) — " +
+        "use that flavour.\n\n" +
+        "Read the loadouts: each character lists attacks (by weapon, with counts), spells cast, " +
+        "features used, skills rolled and saves made. Infer playstyle — stacks of healing " +
+        "spells reads cleric, Sneak Attack reads rogue, bow plus nature-y skills reads ranger — " +
+        "and weave the actual names and counts in (\"three sodding Fireballs\", \"Sneak Attack " +
+        "×5\"). Notice the shape of the luck: no crits all night deserves mockery, a pile of " +
+        "nat 1s a conspiracy theory, a dead-average d20 an accusation of cowardice.\n\n" +
+        "Do not invent story events — you only know what the dice did. The session numbers " +
+        "only mark when roll-tracking started, not how old the campaign is — never call " +
+        "anything a debut, a first session, or a young campaign.",
       messages: [
         {
           role: "user",
