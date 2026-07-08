@@ -91,7 +91,8 @@ export default async function UatPage({
   const totals = uatTotals(rolls);
   const skillBuckets = uatSkillBuckets(rolls);
   const skillMatrix = uatSkillMatrix(rolls, by);
-  const abilityMatrix = uatAbilityMatrix(rolls, by);
+  const checkMatrix = uatAbilityMatrix(rolls, by, ["ability"]);
+  const saveMatrix = uatAbilityMatrix(rolls, by, ["save", "concentration"]);
   const options = uatFilterOptions();
   const items = uatItemUsage(rolls);
   const tops = uatActorTops(rolls, by);
@@ -164,14 +165,18 @@ export default async function UatPage({
     ...Object.fromEntries(skillMatrix.actors.map((a) => [a.name, a.counts[i]])),
   }));
 
-  const abilityRadarSeries = abilityMatrix.actors.map((a) => ({
-    name: a.name,
-    color: colors.get(a.name) ?? FALLBACK,
-  }));
-  const abilityRadarData: RadarRow[] = abilityMatrix.skills.map((ability, i) => ({
-    axis: ABILITY_NAMES[ability] ?? ability,
-    ...Object.fromEntries(abilityMatrix.actors.map((a) => [a.name, a.counts[i]])),
-  }));
+  const abilityRadar = (matrix: typeof checkMatrix) => ({
+    series: matrix.actors.map((a) => ({
+      name: a.name,
+      color: colors.get(a.name) ?? FALLBACK,
+    })),
+    data: matrix.skills.map((ability, i) => ({
+      axis: ABILITY_NAMES[ability] ?? ability,
+      ...Object.fromEntries(matrix.actors.map((a) => [a.name, a.counts[i]])),
+    })) as RadarRow[],
+  });
+  const checkRadar = abilityRadar(checkMatrix);
+  const saveRadar = abilityRadar(saveMatrix);
 
   const skillBubbles = skillBars.map((b) => ({ name: b.name, value: b.count, color: b.fill }));
   const subjectBubbles = stats.map((s) => ({
@@ -288,9 +293,15 @@ export default async function UatPage({
               <CharacterTable stats={stats} colors={colors} subjectLabel={subjectWord} />
               <RadarCard
                 title="Ability checks"
-                description="Bare checks, saves and concentration by ability"
-                data={abilityRadarData}
-                series={abilityRadarSeries}
+                description="Bare ability checks by ability"
+                data={checkRadar.data}
+                series={checkRadar.series}
+              />
+              <RadarCard
+                title="Saving throws"
+                description="Saves and concentration by ability"
+                data={saveRadar.data}
+                series={saveRadar.series}
               />
               <RadarCard
                 title="Skill checks"

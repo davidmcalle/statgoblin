@@ -108,7 +108,8 @@ export default async function CampaignPage({
     totals,
     skillBuckets,
     skillMatrix,
-    abilityMatrix,
+    checkMatrix,
+    saveMatrix,
     options,
     items,
     tops,
@@ -122,7 +123,8 @@ export default async function CampaignPage({
     campaignTotals(id, filters),
     skillAbilityBuckets(id, filters),
     actorSkillMatrix(id, filters, by),
-    actorAbilityMatrix(id, filters, by),
+    actorAbilityMatrix(id, filters, by, ["ability"]),
+    actorAbilityMatrix(id, filters, by, ["save", "concentration"]),
     filterOptions(id),
     itemUsage(id, filters),
     actorTops(id, filters, by),
@@ -209,14 +211,18 @@ export default async function CampaignPage({
     ...Object.fromEntries(skillMatrix.actors.map((a) => [a.name, a.counts[i]])),
   }));
 
-  const abilityRadarSeries = abilityMatrix.actors.map((a) => ({
-    name: a.name,
-    color: colors.get(a.name) ?? FALLBACK,
-  }));
-  const abilityRadarData: RadarRow[] = abilityMatrix.skills.map((ability, i) => ({
-    axis: ABILITY_NAMES[ability] ?? ability,
-    ...Object.fromEntries(abilityMatrix.actors.map((a) => [a.name, a.counts[i]])),
-  }));
+  const abilityRadar = (matrix: typeof checkMatrix) => ({
+    series: matrix.actors.map((a) => ({
+      name: a.name,
+      color: colors.get(a.name) ?? FALLBACK,
+    })),
+    data: matrix.skills.map((ability, i) => ({
+      axis: ABILITY_NAMES[ability] ?? ability,
+      ...Object.fromEntries(matrix.actors.map((a) => [a.name, a.counts[i]])),
+    })) as RadarRow[],
+  });
+  const checkRadar = abilityRadar(checkMatrix);
+  const saveRadar = abilityRadar(saveMatrix);
 
   // Bubble packs — same filtered dataset, so slicers cascade PowerBI-style.
   const skillBubbles = skillBars.map((b) => ({ name: b.name, value: b.count, color: b.fill }));
@@ -377,9 +383,15 @@ export default async function CampaignPage({
           <CharacterTable stats={stats} colors={colors} subjectLabel={subjectWord} />
           <RadarCard
             title="Ability checks"
-            description="Bare checks, saves and concentration by ability"
-            data={abilityRadarData}
-            series={abilityRadarSeries}
+            description="Bare ability checks by ability"
+            data={checkRadar.data}
+            series={checkRadar.series}
+          />
+          <RadarCard
+            title="Saving throws"
+            description="Saves and concentration by ability"
+            data={saveRadar.data}
+            series={saveRadar.series}
           />
           <RadarCard
             title="Skill checks"
