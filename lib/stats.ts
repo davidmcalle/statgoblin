@@ -1,6 +1,7 @@
 import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/db/prisma";
 import { effectiveKind } from "@/lib/kind";
+import { SKILL_ABILITY } from "@/lib/dnd5e-meta";
 
 // Dashboard aggregates over the derived rolls table, all filterable by
 // character, roll type, and recency. Raw SQL where Prisma's groupBy can't
@@ -305,7 +306,9 @@ export async function actorSkillMatrix(
       AND skill IS NOT NULL
       AND ${col} IS NOT NULL AND ${col} <> ''
     GROUP BY 1, 2`;
-  const skills = [...new Set(rows.map((r) => r.skill))].sort();
+  // All 18 skill axes, zero-filled — the radar renders from the first skill
+  // roll instead of waiting for three distinct skills.
+  const skills = Object.keys(SKILL_ABILITY).sort();
   const byActor = new Map<string, Map<string, number>>();
   for (const r of rows) {
     const m = byActor.get(r.subject) ?? new Map<string, number>();

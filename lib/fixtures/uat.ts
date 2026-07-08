@@ -521,7 +521,8 @@ export function uatSkillMatrix(rolls: FixtureRoll[], by: GroupBy): SkillMatrix {
     m.set(r.skill, (m.get(r.skill) ?? 0) + 1);
     bySubject.set(name, m);
   }
-  const skills = [...new Set(rolls.filter((r) => r.skill).map((r) => r.skill!))].sort();
+  // All 18 axes zero-filled, mirroring lib/stats.
+  const skills = Object.keys(SKILL_ABILITY).sort();
   return {
     skills,
     actors: [...bySubject.entries()].map(([name, m]) => ({
