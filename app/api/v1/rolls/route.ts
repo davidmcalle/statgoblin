@@ -14,6 +14,11 @@ const querySchema = z.object({
   to: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
   /** ISO datetime — rows written/updated since then, for incremental sync. */
   updated_since: z.iso.datetime().optional(),
+  /** The key is the GM credential, so these are opt-in rather than forbidden. */
+  include_hidden: z.enum(["true", "false"]).optional(),
+  /** Soft-deleted rolls as tombstones (deletedAt set) — incremental consumers
+   *  need them to propagate removals. */
+  include_deleted: z.enum(["true", "false"]).optional(),
   limit: z.coerce.number().int().min(1).max(500).default(100),
   offset: z.coerce.number().int().min(0).default(0),
 });
@@ -45,8 +50,8 @@ export async function GET(request: Request) {
   const day = (d: string) => new Date(`${d}T00:00:00Z`);
   const where = {
     campaignId,
-    deletedAt: null,
-    isHidden: false,
+    ...(q.include_deleted === "true" ? {} : { deletedAt: null }),
+    ...(q.include_hidden === "true" ? {} : { isHidden: false }),
     ...(q.updated_since ? { updatedAt: { gte: new Date(q.updated_since) } } : {}),
     ...(q.actor ? { actorName: q.actor } : {}),
     ...(q.type ? { rollType: q.type } : {}),
@@ -101,7 +106,9 @@ export async function GET(request: Request) {
         targetCount: true,
         ability: true,
         skill: true,
+        isHidden: true,
         rolledAt: true,
+        deletedAt: true,
         createdAt: true,
         updatedAt: true,
       },

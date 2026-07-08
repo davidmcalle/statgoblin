@@ -55,7 +55,7 @@ const ENDPOINTS: EndpointDef[] = [
     method: "GET",
     path: "/api/v1/rolls",
     summary: "List rolls, filterable",
-    desc: "Individual rolls, oldest first — the same filter axes as the dashboard. Hidden death saves and soft-deleted rolls are excluded. Combine any parameters; all are optional.",
+    desc: "Individual rolls, oldest first — the same filter axes as the dashboard. By default hidden death saves and soft-deleted rolls are excluded so responses match the dashboard; the key is the GM credential, so both are available on request via include_hidden and include_deleted. Combine any parameters; all are optional.",
     exampleQuery: "?type=attack&from=2026-07-01&limit=2",
     params: [
       { name: "actor", type: "string", desc: "Exact character or monster name", example: "Maeple Morningsong" },
@@ -65,6 +65,8 @@ const ENDPOINTS: EndpointDef[] = [
       { name: "from", type: "date (YYYY-MM-DD)", desc: "Start date, inclusive", example: "2026-07-01" },
       { name: "to", type: "date (YYYY-MM-DD)", desc: "End date, inclusive", example: "2026-07-31" },
       { name: "updated_since", type: "ISO datetime", desc: "Only rows written or updated since — for incremental sync. Response orders by update time; key rows by (messageId, rollIndex), reprocessing recreates ids.", example: "2026-07-06T00:00:00Z" },
+      { name: "include_hidden", type: "enum", desc: "Include death saves the GM is currently hiding from players. Careful where the output ends up.", options: ["true", "false"], example: "false" },
+      { name: "include_deleted", type: "enum", desc: "Include soft-deleted rolls as tombstones (deletedAt set) — pair with updated_since so removals propagate to your copy.", options: ["true", "false"], example: "false" },
       { name: "limit", type: "integer 1–500", desc: "Page size (default 100)", example: "100" },
       { name: "offset", type: "integer", desc: "Pagination offset (default 0)", example: "0" },
     ],
