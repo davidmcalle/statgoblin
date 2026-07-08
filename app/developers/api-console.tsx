@@ -151,6 +151,10 @@ function Endpoint({
   const [values, setValues] = useState<Record<string, string>>({});
   const [pending, setPending] = useState(false);
   const [result, setResult] = useState<{ status: number; ms: number; body: string } | null>(null);
+  // Origin only exists in the browser; render relative during SSR and upgrade
+  // after mount so server and client HTML match.
+  const [origin, setOrigin] = useState("");
+  useEffect(() => setOrigin(window.location.origin), []);
 
   const query = Object.entries(values)
     .filter(([, v]) => v.trim() !== "")
@@ -158,7 +162,7 @@ function Endpoint({
     .join("&");
   const url = `${def.path}${query ? `?${query}` : ""}`;
   const curl = [
-    `curl "${typeof window === "undefined" ? "" : window.location.origin}${url}" \\`,
+    `curl "${origin}${url}" \\`,
     `  -H "X-Campaign-Id: ${campaignId || "$CAMPAIGN_ID"}" \\`,
     `  -H "Authorization: Bearer ${apiKey ? "••••••" : "$API_KEY"}"`,
   ].join("\n");
