@@ -301,10 +301,17 @@ async function generateNarrative(
       comments: new Map(parsed.awardComments.map((c) => [c.key, c.comment])),
       highlights: parsed.highlights,
     };
-  } catch {
-    // Narrative is garnish — never block the summary on the LLM.
+  } catch (error) {
+    // Narrative is garnish — never block the summary on the LLM. But say why.
+    console.error("summary narrative generation failed:", error);
     return null;
   }
+}
+
+/** Whether narrative generation is available at all. */
+export function llmConfigured(): boolean {
+  const key = process.env.ANTHROPIC_API_KEY;
+  return !!key && key !== "change-me";
 }
 
 /** Build (or fetch cached) summary payload for the picked sessions. */

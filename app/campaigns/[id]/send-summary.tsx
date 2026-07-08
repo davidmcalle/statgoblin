@@ -164,8 +164,9 @@ export function SendSummary({
                   </div>
                 ) : (
                   <p className="text-muted-foreground">
-                    No narrative — the app has no Anthropic API key configured, so this will post
-                    as plain stats.
+                    {preview.llmConfigured
+                      ? "No narrative in this version — it was generated before the API key was set, or the generation failed (check server logs). Hit Regenerate to write one."
+                      : "No narrative — the app has no Anthropic API key configured, so this will post as plain stats."}
                   </p>
                 )}
 

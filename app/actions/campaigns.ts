@@ -19,7 +19,7 @@ import {
   sessionLabelOf,
 } from "@/lib/discord";
 import { renderAwardCards } from "@/lib/cards";
-import { getOrCreateSummary, type SummaryPayload } from "@/lib/summary";
+import { getOrCreateSummary, llmConfigured, type SummaryPayload } from "@/lib/summary";
 import { sessions } from "@/lib/stats";
 import { sessionDayFrom } from "@/lib/session-day";
 
@@ -132,6 +132,7 @@ export type SummaryPreview = {
   notables: SummaryPayload["notables"];
   cards: { title: string; dataUri: string }[];
   cached: boolean;
+  llmConfigured: boolean;
 };
 
 /**
@@ -161,6 +162,7 @@ export async function previewDiscordSummary(
       dataUri: `data:image/png;base64,${c.data.toString("base64")}`,
     })),
     cached,
+    llmConfigured: llmConfigured(),
   };
 }
 
