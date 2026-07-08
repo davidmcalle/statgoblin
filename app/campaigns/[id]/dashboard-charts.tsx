@@ -185,7 +185,8 @@ export type PactRow = { name: string; color: string; nat20: number; nat1: number
 
 export function DicePactsCard({ rows }: { rows: PactRow[] }) {
   const isMobile = useIsMobile();
-  if (rows.length === 0) return null;
+  // Nothing lucky or cursed yet — an empty diverging chart is just a frame.
+  if (rows.length === 0 || rows.every((r) => r.nat20 === 0 && r.nat1 === 0)) return null;
   // nat1 mirrored negative for the diverging layout.
   const data = rows.map((r) => ({ ...r, nat1: -r.nat1 }));
   const span = Math.max(10, ...rows.map((r) => Math.max(r.nat20, r.nat1))) * 1.2;
