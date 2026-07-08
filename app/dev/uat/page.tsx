@@ -189,7 +189,7 @@ export default async function UatPage({
   return (
     <main className="mx-auto w-full max-w-4xl flex-1 space-y-6 p-4 sm:space-y-8 sm:p-6">
       <div className="flex items-center gap-3 border-b pb-4 sm:gap-4 sm:pb-6">
-        <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-primary/20 to-primary/5 text-xl font-bold sm:h-14 sm:w-14">
+        <span className="flex h-12 w-12 items-center justify-center rounded-md bg-muted text-xl font-bold sm:h-14 sm:w-14">
           U
         </span>
         <div className="min-w-0">

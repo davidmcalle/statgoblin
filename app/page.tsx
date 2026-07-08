@@ -67,7 +67,7 @@ export default async function HomePage() {
                 // eslint-disable-next-line @next/next/no-img-element
                 <img src={campaign.image} alt="" className="h-12 w-12 rounded-lg object-cover" />
               ) : (
-                <span className="flex h-12 w-12 items-center justify-center rounded-lg bg-gradient-to-br from-primary/20 to-primary/5 text-lg font-bold">
+                <span className="flex h-12 w-12 items-center justify-center rounded-md bg-muted text-lg font-bold">
                   {campaign.name.slice(0, 1)}
                 </span>
               )}

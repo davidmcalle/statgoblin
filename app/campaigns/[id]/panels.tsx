@@ -12,52 +12,48 @@ import type { ActorStats, CampaignTotals, DeathSaveRow, ItemUsage } from "@/lib/
 
 // Server-rendered panels: stat cards, character table, death saves.
 
+// One bordered strip, cells split by hairlines — not four floating cards.
 export function StatCards({ totals }: { totals: CampaignTotals }) {
   const { totalRolls, nat20s, nat1s, avgD20, highest } = totals;
   const avgBad = avgD20 !== null && avgD20 < 10.5;
+  const cell = "p-4";
   return (
-    <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-      <Card className="gap-1 py-4">
-        <CardContent className="px-4">
-          <div className="text-2xl font-bold">{totalRolls}</div>
-          <div className="text-sm text-muted-foreground">Total rolls</div>
-        </CardContent>
-      </Card>
-      <Card className="gap-1 py-4">
-        <CardContent className="flex items-start justify-between px-4">
+    <div className="grid grid-cols-2 overflow-hidden rounded-md border border-border lg:grid-cols-4">
+      <div className={`${cell} border-b border-border lg:border-b-0 lg:border-r`}>
+        <div className="text-2xl font-bold">{totalRolls}</div>
+        <div className="text-sm text-muted-foreground">Total rolls</div>
+      </div>
+      <div className={`${cell} border-b border-l border-border lg:border-b-0`}>
+        <div className="flex items-start justify-between">
           <div>
-            <div className="text-2xl font-bold text-green-500">{nat20s}</div>
+            <div className="text-2xl font-bold text-green-600 dark:text-green-500">{nat20s}</div>
             <div className="text-sm text-muted-foreground">Nat 20s</div>
           </div>
           <div className="text-right">
-            <div className="text-2xl font-bold text-red-500">{nat1s}</div>
+            <div className="text-2xl font-bold text-red-600 dark:text-red-400">{nat1s}</div>
             <div className="text-sm text-muted-foreground">Nat 1s</div>
           </div>
-        </CardContent>
-      </Card>
-      <Card className="gap-1 py-4">
-        <CardContent className="px-4">
-          <div className="text-2xl font-bold">{highest?.total ?? "—"}</div>
-          <div className="text-sm text-muted-foreground">
-            Highest d20 roll
-            {highest && (
-              <>
-                {" · "}
-                {highest.actorName ?? "someone"},{" "}
-                {highest.rolledAt.toLocaleDateString("en-GB", { day: "numeric", month: "short" })}
-              </>
-            )}
-          </div>
-        </CardContent>
-      </Card>
-      <Card className="gap-1 py-4">
-        <CardContent className="px-4">
-          <div className={`text-2xl font-bold ${avgBad ? "text-red-500" : "text-green-500"}`}>
-            {avgD20?.toFixed(1) ?? "—"}
-          </div>
-          <div className="text-sm text-muted-foreground">Average d20 · expected 10.5</div>
-        </CardContent>
-      </Card>
+        </div>
+      </div>
+      <div className={`${cell} border-border lg:border-l`}>
+        <div className="text-2xl font-bold">{highest?.total ?? "—"}</div>
+        <div className="text-sm text-muted-foreground">
+          Highest d20 roll
+          {highest && (
+            <>
+              {" · "}
+              {highest.actorName ?? "someone"},{" "}
+              {highest.rolledAt.toLocaleDateString("en-GB", { day: "numeric", month: "short" })}
+            </>
+          )}
+        </div>
+      </div>
+      <div className={`${cell} border-l border-border`}>
+        <div className={`text-2xl font-bold ${avgBad ? "text-red-600 dark:text-red-400" : "text-green-600 dark:text-green-500"}`}>
+          {avgD20?.toFixed(1) ?? "—"}
+        </div>
+        <div className="text-sm text-muted-foreground">Average d20 · expected 10.5</div>
+      </div>
     </div>
   );
 }

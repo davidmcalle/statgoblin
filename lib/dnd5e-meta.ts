@@ -51,25 +51,28 @@ export const SKILL_ABILITY: Record<string, string> = {
   sur: "wis",
 };
 
+// Series colors come from the validated categorical palette in globals.css
+// (--series-1..8), which re-steps the same hues per theme. Abilities take a
+// fixed slot each so a stat keeps its color everywhere.
 export const ABILITY_COLORS: Record<string, string> = {
-  str: "#d08a3d",
-  dex: "#3fa284",
-  con: "#c4586e",
-  int: "#8dab3a",
-  wis: "#8b7fe8",
-  cha: "#dd7663",
+  str: "var(--series-8)", // orange
+  dex: "var(--series-2)", // aqua
+  con: "var(--series-6)", // red
+  int: "var(--series-1)", // blue
+  wis: "var(--series-4)", // green
+  cha: "var(--series-5)", // violet
 };
 
-// Stable per-character palette: sorted names index into this list.
+// Stable per-character palette: sorted names index into the slot order.
 export const CHARACTER_PALETTE = [
-  "#d99a2b", // amber
-  "#8b7fe8", // violet
-  "#3b82d9", // blue
-  "#3fa284", // teal
-  "#4d9e35", // green
-  "#dd7663", // salmon
-  "#c4586e", // rose
-  "#8dab3a", // olive
+  "var(--series-1)",
+  "var(--series-2)",
+  "var(--series-3)",
+  "var(--series-4)",
+  "var(--series-5)",
+  "var(--series-6)",
+  "var(--series-7)",
+  "var(--series-8)",
 ];
 
 export function characterColors(names: string[]): Map<string, string> {

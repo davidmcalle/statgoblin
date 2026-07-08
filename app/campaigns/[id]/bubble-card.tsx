@@ -101,6 +101,9 @@ export function BubblePackCard({
                       dominantBaseline="central"
                       y={(li - (lines.length - 1) / 2) * fontSize * 1.15}
                       fill="white"
+                      stroke="rgba(0,0,0,0.4)"
+                      strokeWidth={fontSize / 8}
+                      paintOrder="stroke"
                       fontSize={fontSize}
                       fontWeight={600}
                       style={{ pointerEvents: "none" }}

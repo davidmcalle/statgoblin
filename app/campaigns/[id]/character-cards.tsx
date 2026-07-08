@@ -37,19 +37,21 @@ function crLabel(cr: number): string {
   return String(cr);
 }
 
+// Identity color rides the avatar's border so it matches the chart series
+// without filling the UI with saturated discs.
 function Avatar({ data, size }: { data: CharacterCardData; size: number }) {
   return data.image ? (
     // eslint-disable-next-line @next/next/no-img-element
     <img
       src={data.image}
       alt=""
-      style={{ width: size, height: size }}
-      className="rounded-full object-cover"
+      style={{ width: size, height: size, borderColor: data.color }}
+      className="rounded-full border-2 object-cover"
     />
   ) : (
     <span
-      style={{ width: size, height: size, background: data.color, fontSize: size / 2.2 }}
-      className="flex items-center justify-center rounded-full font-bold text-white"
+      style={{ width: size, height: size, borderColor: data.color, fontSize: size / 2.2 }}
+      className="flex items-center justify-center rounded-full border-2 bg-muted font-bold text-foreground"
     >
       {data.name.slice(0, 1)}
     </span>
@@ -138,7 +140,7 @@ export function CharacterCard({
     <>
       <Card
         onClick={() => setOpen(true)}
-        className={`cursor-pointer transition-shadow hover:shadow-md ${isOwn ? "ring-2 ring-primary/40" : ""}`}
+        className={`cursor-pointer transition-colors hover:bg-muted/40 ${isOwn ? "ring-primary" : ""}`}
       >
         <CardHeader className="flex flex-row items-center gap-3 space-y-0">
           <Avatar data={data} size={44} />

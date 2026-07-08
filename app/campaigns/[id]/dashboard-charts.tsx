@@ -150,7 +150,7 @@ export function D20HistogramCard({ data }: { data: HistBucket[] }) {
                 if (!active || !payload?.length) return null;
                 const rows = breakdown.get(Number(label)) ?? [];
                 return (
-                  <div className="rounded-lg border bg-popover px-3 py-2 text-xs shadow-md">
+                  <div className="rounded-md border bg-popover px-3 py-2 text-xs">
                     <p className="mb-1 font-semibold">
                       Rolled {label} — {payload[0]?.value} time{payload[0]?.value === 1 ? "" : "s"}
                     </p>

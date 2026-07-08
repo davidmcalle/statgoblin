@@ -102,49 +102,6 @@ function describe(r: RollLogRow): string {
 
 const DICE_CAP = 6;
 
-// Roll category drives the row accent — check vs save vs attack vs damage vs
-// heal vs feature vs item, per the log design.
-type Category = "check" | "save" | "attack" | "damage" | "healing" | "feature" | "item" | "other";
-
-const CATEGORY_COLORS: Record<Category, string> = {
-  check: "#8b7fe8", // violet
-  save: "#3fa284", // teal-green
-  attack: "#3b82d9", // blue
-  damage: "#e05d38", // ember
-  healing: "#d95d8a", // rose
-  feature: "#d99a2b", // amber
-  item: "#5bb8c4", // cyan
-  other: "#6b7280", // gray
-};
-
-function categoryOf(r: RollLogRow): Category {
-  switch (r.rollType) {
-    case "skill":
-    case "ability":
-    case "tool":
-    case "initiative":
-      return "check";
-    case "save":
-    case "concentration":
-    case "death":
-      return "save";
-    case "attack":
-      return "attack";
-    case "damage":
-      return "damage";
-    case "healing":
-    case "hitDie":
-      return "healing";
-    case "usage":
-    case "recharge":
-      // Class/racial features are dnd5e "feat" items; everything else used
-      // from the sheet (consumables, weapons, wondrous items) is an item.
-      return r.itemType === "feat" ? "feature" : "item";
-    default:
-      return "other";
-  }
-}
-
 // One SVG outline per physical die: d4 triangle, d6 square, d8 diamond,
 // d10 kite, d12 pentagon, d20 hexagon, anything else a circle.
 const DIE_PATHS: Record<number, string> = {
@@ -230,13 +187,11 @@ export function RollLog({
             </h3>
             <span className="h-px flex-1 bg-border" />
           </div>
-          <ul className="space-y-2">
+          <ul className="divide-y divide-border border-y border-border">
             {g.rows.map((r) => {
               const Icon = (r.rollType === "skill" && r.skill && SKILL_ICONS[r.skill]) ||
                 TYPE_ICONS[r.rollType] ||
                 Dices;
-              const category = categoryOf(r);
-              const accent = CATEGORY_COLORS[category];
               const avatarColor = (r.actorName && colors.get(r.actorName)) || "var(--border)";
               const shown = r.dice.slice(0, DICE_CAP);
               const hidden = r.dice.length - shown.length;
@@ -260,23 +215,22 @@ export function RollLog({
                 </>
               );
               return (
-                <li
-                  key={r.id}
-                  className="rounded-lg border bg-card p-3 sm:p-4"
-                  style={{ borderLeft: `3px solid ${accent}` }}
-                >
+                <li key={r.id} className="py-3 sm:py-3.5">
                   <div className="flex items-center gap-3 sm:gap-4">
+                    {/* Identity color rides the avatar's border, matching the
+                        character's series color in the charts. */}
                     {r.actorName && images.get(r.actorName) ? (
                       // eslint-disable-next-line @next/next/no-img-element
                       <img
                         src={images.get(r.actorName)}
                         alt=""
-                        className="h-10 w-10 shrink-0 rounded-full object-cover sm:h-11 sm:w-11"
+                        className="h-10 w-10 shrink-0 rounded-full border-2 object-cover sm:h-11 sm:w-11"
+                        style={{ borderColor: avatarColor }}
                       />
                     ) : (
                       <span
-                        className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full font-bold text-white sm:h-11 sm:w-11"
-                        style={{ background: avatarColor }}
+                        className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border-2 bg-muted font-bold text-foreground sm:h-11 sm:w-11"
+                        style={{ borderColor: avatarColor }}
                       >
                         {(r.actorName ?? "?").slice(0, 1)}
                       </span>
@@ -291,7 +245,7 @@ export function RollLog({
                         )}
                       </div>
                       <div className="mt-1 flex items-center gap-1.5 text-sm text-muted-foreground">
-                        <Icon size={15} className="shrink-0" aria-hidden style={{ color: accent }} />
+                        <Icon size={15} className="shrink-0" aria-hidden />
                         <span className="truncate">{describe(r)}</span>
                         {r.isHidden && (
                           <span className="ml-1 inline-flex shrink-0 items-center gap-1 rounded bg-muted px-1.5 py-0.5 text-[10px] font-semibold">

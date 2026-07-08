@@ -19,7 +19,7 @@ export function ViewToggle({ view }: { view: "log" | "charts" }) {
 
   const base =
     "flex items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-sm transition-colors";
-  const active = "bg-background font-semibold shadow-sm";
+  const active = "bg-background font-semibold ring-1 ring-border";
   const idle = "text-muted-foreground hover:text-foreground";
 
   return (
