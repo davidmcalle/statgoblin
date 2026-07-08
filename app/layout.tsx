@@ -7,21 +7,21 @@ import { D20Mark } from "@/components/logo";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { AppSidebar } from "@/components/app-sidebar";
 import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
-import { Alegreya, Alegreya_Sans, Geist_Mono } from "next/font/google";
+import { Cormorant_SC, Geist_Mono, Source_Sans_3 } from "next/font/google";
 import "./globals.css";
 import { cn } from "@/lib/utils";
 
-// Type carries the identity: Alegreya for headings, its companion sans for
-// everything else — a warm, bookish pair that suits a table of dice rollers.
-// Mono stays for keys/codes only.
-const alegreya = Alegreya({
+// Type carries the identity: small-caps serif headings in the D&D
+// chapter-heading tradition, with a Scala Sans-adjacent body like the 5e
+// books. Mono stays for keys/codes only.
+const cormorantSC = Cormorant_SC({
   subsets: ["latin"],
+  weight: ["600", "700"],
   variable: "--font-display",
 });
 
-const alegreyaSans = Alegreya_Sans({
+const sourceSans = Source_Sans_3({
   subsets: ["latin"],
-  weight: ["400", "500", "700"],
   variable: "--font-body",
 });
 
@@ -56,7 +56,7 @@ export default async function RootLayout({
     <html
       lang="en"
       suppressHydrationWarning
-      className={cn("h-full antialiased font-sans", alegreya.variable, alegreyaSans.variable, geistMono.variable)}
+      className={cn("h-full antialiased font-sans", cormorantSC.variable, sourceSans.variable, geistMono.variable)}
     >
       <body className="min-h-full flex flex-col">
         <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
