@@ -7,16 +7,15 @@ import { D20Mark } from "@/components/logo";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { AppSidebar } from "@/components/app-sidebar";
 import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
-import { Cormorant_SC, Geist_Mono, Source_Sans_3 } from "next/font/google";
+import { Geist_Mono, Source_Sans_3, Vollkorn } from "next/font/google";
 import "./globals.css";
 import { cn } from "@/lib/utils";
 
-// Type carries the identity: small-caps serif headings in the D&D
-// chapter-heading tradition, with a Scala Sans-adjacent body like the 5e
+// Type carries the identity: a sturdy bookish serif for headings that stays
+// readable at card-title sizes, with a Scala Sans-adjacent body like the 5e
 // books. Mono stays for keys/codes only.
-const cormorantSC = Cormorant_SC({
+const vollkorn = Vollkorn({
   subsets: ["latin"],
-  weight: ["600", "700"],
   variable: "--font-display",
 });
 
@@ -56,7 +55,7 @@ export default async function RootLayout({
     <html
       lang="en"
       suppressHydrationWarning
-      className={cn("h-full antialiased font-sans", cormorantSC.variable, sourceSans.variable, geistMono.variable)}
+      className={cn("h-full antialiased font-sans", vollkorn.variable, sourceSans.variable, geistMono.variable)}
     >
       <body className="min-h-full flex flex-col">
         <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
