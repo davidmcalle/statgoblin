@@ -1,8 +1,14 @@
 "use client";
 
+/* eslint-disable @next/next/no-img-element */
+
 import { useState, useTransition } from "react";
 import { Send } from "lucide-react";
-import { sendDiscordSummary } from "@/app/actions/campaigns";
+import {
+  previewDiscordSummary,
+  sendDiscordSummary,
+  type SummaryPreview,
+} from "@/app/actions/campaigns";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -14,8 +20,8 @@ import {
 
 const MAX_SESSIONS = 10;
 
-// GM-only: pick up to 10 sessions, post their stat summary to the campaign's
-// Discord webhook. (Phase B will hang the LLM narrative off the same picker.)
+// GM-only: pick up to 10 sessions, preview the generated recap (narrative,
+// highlights, award cards), regenerate if it's not right, then send.
 export function SendSummary({
   campaignId,
   sessions,
@@ -25,11 +31,12 @@ export function SendSummary({
   campaignId: string;
   sessions: { n: number; date: string }[];
   webhookConfigured: boolean;
-  /** datesKeys of already-generated summaries — resends skip the LLM. */
+  /** datesKeys of already-generated summaries — previews of those are instant. */
   generatedKeys?: string[];
 }) {
   const [open, setOpen] = useState(false);
   const [picked, setPicked] = useState<Set<string>>(new Set());
+  const [preview, setPreview] = useState<SummaryPreview | null>(null);
   const [status, setStatus] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
@@ -47,6 +54,19 @@ export function SendSummary({
     });
   };
 
+  const generate = (regenerate: boolean) =>
+    startTransition(async () => {
+      setStatus(null);
+      const result = await previewDiscordSummary(campaignId, [...picked], regenerate);
+      if (result.ok) setPreview(result);
+      else setStatus(result.error);
+    });
+
+  const reset = () => {
+    setPreview(null);
+    setStatus(null);
+  };
+
   return (
     <>
       <Button
@@ -55,23 +75,27 @@ export function SendSummary({
         className="rounded-md"
         title="Send session summary to Discord"
         aria-label="Send session summary to Discord"
-        onClick={() => { setStatus(null); setOpen(true); }}
+        onClick={() => {
+          reset();
+          setPicked(new Set());
+          setOpen(true);
+        }}
       >
         <Send size={16} />
       </Button>
 
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="max-w-[calc(100%-2rem)] sm:max-w-md">
+        <DialogContent className="max-h-[85vh] max-w-[calc(100%-2rem)] overflow-y-auto sm:max-w-2xl">
           <DialogHeader>
-            <DialogTitle>Send session summary</DialogTitle>
+            <DialogTitle>{preview ? preview.label : "Session summary"}</DialogTitle>
             <DialogDescription>
-              {webhookConfigured
-                ? `Pick the sessions to recap (up to ${MAX_SESSIONS}). The first send writes the summary and awards; resending the same pick reuses it.`
-                : "No webhook set — paste a Discord webhook URL in campaign settings first (channel → Integrations → Webhooks)."}
+              {preview
+                ? "This is what will post to Discord. Regenerate if it's not right."
+                : `Pick the sessions to recap (up to ${MAX_SESSIONS}), then preview before anything is sent.`}
             </DialogDescription>
           </DialogHeader>
 
-          {webhookConfigured && (
+          {!preview && (
             <>
               <ul className="max-h-64 space-y-1 overflow-y-auto">
                 {sessions
@@ -104,37 +128,108 @@ export function SendSummary({
                   ))}
               </ul>
               <div className="flex flex-wrap items-center gap-3">
+                <Button disabled={pending || picked.size === 0} onClick={() => generate(false)}>
+                  {pending
+                    ? "Generating…"
+                    : alreadyGenerated
+                      ? "Preview"
+                      : "Generate Preview"}
+                </Button>
+                {status && <span className="text-sm text-muted-foreground">{status}</span>}
+              </div>
+            </>
+          )}
+
+          {preview && (
+            <>
+              <div className="space-y-4 text-sm">
+                <div className="flex flex-wrap gap-x-4 gap-y-1 font-medium">
+                  <span>🎲 {preview.totals.totalRolls} rolls</span>
+                  <span className="text-green-600 dark:text-green-500">
+                    🍀 {preview.totals.nat20s} nat 20s
+                  </span>
+                  <span className="text-red-600 dark:text-red-400">
+                    💀 {preview.totals.nat1s} nat 1s
+                  </span>
+                  {preview.totals.avgD20 !== null && (
+                    <span>⚖️ avg d20 {preview.totals.avgD20.toFixed(1)}</span>
+                  )}
+                </div>
+
+                {preview.narrative ? (
+                  <div className="space-y-2 border-l-2 border-border pl-3 text-foreground">
+                    {preview.narrative.split(/\n{2,}/).map((p, i) => (
+                      <p key={i}>{p}</p>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-muted-foreground">
+                    No narrative — the app has no Anthropic API key configured, so this will post
+                    as plain stats.
+                  </p>
+                )}
+
+                {preview.notables && preview.notables.best.length > 0 && (
+                  <div>
+                    <h3 className="mb-1 font-mono text-[10px] tracking-widest text-muted-foreground uppercase">
+                      Top rolls
+                    </h3>
+                    <ul className="space-y-0.5 text-muted-foreground">
+                      {preview.notables.best.map((n, i) => (
+                        <li key={i}>
+                          <span className="font-semibold text-foreground">{n.total}</span> —{" "}
+                          {n.actorName}, {n.label} (d20: {n.d20})
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+                {preview.highlights.length > 0 && (
+                  <div>
+                    <h3 className="mb-1 font-mono text-[10px] tracking-widest text-muted-foreground uppercase">
+                      Highlights
+                    </h3>
+                    <ul className="list-inside list-disc space-y-0.5 text-muted-foreground">
+                      {preview.highlights.map((h, i) => (
+                        <li key={i}>{h}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+                {preview.cards.length > 0 && (
+                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                    {preview.cards.map((c) => (
+                      <img
+                        key={c.title}
+                        src={c.dataUri}
+                        alt={c.title}
+                        className="w-full rounded-md border border-border"
+                      />
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <div className="flex flex-wrap items-center gap-3">
                 <Button
-                  disabled={pending || picked.size === 0}
+                  disabled={pending}
                   onClick={() =>
                     startTransition(async () => {
                       const result = await sendDiscordSummary(campaignId, [...picked]);
-                      setStatus(result.sent ? "Sent ✓" : (result.error ?? "Failed"));
+                      setStatus(result.sent ? "Sent to Discord ✓" : (result.error ?? "Failed"));
                     })
                   }
                 >
-                  {pending
-                    ? "Working…"
-                    : picked.size === 0
-                      ? "Send"
-                      : alreadyGenerated
-                        ? "Send"
-                        : "Generate Summary & Send"}
+                  {pending ? "Working…" : "Send to Discord"}
                 </Button>
-                {alreadyGenerated && (
-                  <Button
-                    variant="outline"
-                    disabled={pending}
-                    onClick={() =>
-                      startTransition(async () => {
-                        const result = await sendDiscordSummary(campaignId, [...picked], true);
-                        setStatus(result.sent ? "Regenerated & sent ✓" : (result.error ?? "Failed"));
-                      })
-                    }
-                  >
-                    Regenerate & Send
-                  </Button>
-                )}
+                <Button variant="outline" disabled={pending} onClick={() => generate(true)}>
+                  {pending ? "…" : "Regenerate"}
+                </Button>
+                <Button variant="ghost" disabled={pending} onClick={reset}>
+                  Back
+                </Button>
                 {status && <span className="text-sm text-muted-foreground">{status}</span>}
               </div>
             </>

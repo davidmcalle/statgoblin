@@ -18,8 +18,8 @@ import {
   postWebhook,
   sessionLabelOf,
 } from "@/lib/discord";
-import { renderAwardCard } from "@/lib/cards";
-import { getOrCreateSummary } from "@/lib/summary";
+import { renderAwardCards } from "@/lib/cards";
+import { getOrCreateSummary, type SummaryPayload } from "@/lib/summary";
 import { sessions } from "@/lib/stats";
 import { sessionDayFrom } from "@/lib/session-day";
 
@@ -89,16 +89,17 @@ export async function updateCampaign(campaignId: string, formData: FormData): Pr
  * the campaign's Discord webhook. First send generates awards + the Claude
  * narrative and caches the result; resends reuse the cache verbatim.
  */
-export async function sendDiscordSummary(
+/** Resolve the picked session dates and build (or fetch) the summary. */
+async function summaryFor(
   campaignId: string,
   dates: string[],
-  regenerate = false,
-): Promise<{ sent: boolean; cached?: boolean; error?: string }> {
+  regenerate: boolean,
+): Promise<
+  | { ok: true; campaign: { name: string; image: string; discordWebhookUrl: string }; payload: SummaryPayload; cached: boolean; images: Map<string, string> }
+  | { ok: false; error: string }
+> {
   const userId = await requireUserId();
   const campaign = await requireCreator(campaignId, userId);
-  if (!campaign.discordWebhookUrl) {
-    return { sent: false, error: "Set a Discord webhook URL in campaign settings first" };
-  }
   const all = await sessions(campaignId);
   const valid = new Map(all.map((s) => [s.date, s]));
   const picked = [...new Set(dates)]
@@ -106,48 +107,86 @@ export async function sendDiscordSummary(
     .sort()
     .slice(0, 10)
     .map((d) => valid.get(d)!);
-  if (picked.length === 0) return { sent: false, error: "Pick at least one session" };
+  if (picked.length === 0) return { ok: false, error: "Pick at least one session" };
 
   const { payload, cached } = await getOrCreateSummary(campaignId, campaign.name, picked, regenerate);
-
   const actors = await prisma.actor.findMany({
     where: { campaignId, image: { not: "" } },
     select: { name: true, image: true },
   });
-  const images = new Map(actors.map((a) => [a.name, a.image]));
+  return {
+    ok: true,
+    campaign,
+    payload,
+    cached,
+    images: new Map(actors.map((a) => [a.name, a.image])),
+  };
+}
 
-  // Award cards: text composed onto the character art, attached as a gallery.
+export type SummaryPreview = {
+  ok: true;
+  label: string;
+  narrative: string | null;
+  highlights: string[];
+  totals: SummaryPayload["totals"];
+  notables: SummaryPayload["notables"];
+  cards: { title: string; dataUri: string }[];
+  cached: boolean;
+};
+
+/**
+ * Creator-only: generate (or fetch) the summary for the picked sessions and
+ * return everything the dialog needs to show it — narrative, highlights,
+ * notable rolls and the rendered award cards — without posting anything.
+ */
+export async function previewDiscordSummary(
+  campaignId: string,
+  dates: string[],
+  regenerate = false,
+): Promise<SummaryPreview | { ok: false; error: string }> {
+  const result = await summaryFor(campaignId, dates, regenerate);
+  if (!result.ok) return result;
+  const { payload, images, cached } = result;
   const label = sessionLabelOf(payload.sessions);
-  const cards = (
-    await Promise.all(
-      payload.awards.slice(0, 9).map(async (a, i) => {
-        try {
-          const data = await renderAwardCard({
-            title: a.title,
-            actorName: a.actorName,
-            comment: a.comment,
-            statLine: a.statLine,
-            sessionLabel: label,
-            imageUrl: images.get(a.actorName),
-          });
-          return { name: `award-${i}.png`, data };
-        } catch {
-          return null; // one bad portrait shouldn't sink the send
-        }
-      }),
-    )
-  ).filter((c): c is { name: string; data: Buffer } => c !== null);
+  const cards = await renderAwardCards(payload.awards, images, label);
+  return {
+    ok: true,
+    label,
+    narrative: payload.narrative,
+    highlights: payload.highlights ?? [],
+    totals: payload.totals,
+    notables: payload.notables,
+    cards: cards.map((c) => ({
+      title: c.title,
+      dataUri: `data:image/png;base64,${c.data.toString("base64")}`,
+    })),
+    cached,
+  };
+}
 
+export async function sendDiscordSummary(
+  campaignId: string,
+  dates: string[],
+): Promise<{ sent: boolean; error?: string }> {
+  const result = await summaryFor(campaignId, dates, false);
+  if (!result.ok) return { sent: false, error: result.error };
+  const { campaign, payload, images } = result;
+  if (!campaign.discordWebhookUrl) {
+    return { sent: false, error: "Set a Discord webhook URL in campaign settings first" };
+  }
+
+  const label = sessionLabelOf(payload.sessions);
+  const cards = await renderAwardCards(payload.awards, images, label);
   try {
     await postWebhook(
       campaign.discordWebhookUrl,
       [buildSummaryHeaderEmbed(campaign.name, campaign.image, payload)],
-      cards,
+      cards.map(({ name, data }) => ({ name, data })),
     );
   } catch (e) {
     return { sent: false, error: e instanceof Error ? e.message : "Failed to reach Discord" };
   }
-  return { sent: true, cached };
+  return { sent: true };
 }
 
 /** Creator-only: mint an additional API key; plaintext returned once. */

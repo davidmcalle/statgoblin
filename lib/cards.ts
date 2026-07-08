@@ -45,6 +45,32 @@ const el = (type: string, style: Record<string, unknown>, children?: unknown, re
   props: { style, ...(children !== undefined ? { children } : {}), ...rest },
 });
 
+/** Render the card set for a summary's awards; a failed card is skipped. */
+export async function renderAwardCards(
+  awards: { title: string; actorName: string; comment?: string; statLine: string }[],
+  actorImages: Map<string, string>,
+  sessionLabel: string,
+): Promise<{ name: string; title: string; data: Buffer }[]> {
+  const cards = await Promise.all(
+    awards.slice(0, 9).map(async (a, i) => {
+      try {
+        const data = await renderAwardCard({
+          title: a.title,
+          actorName: a.actorName,
+          comment: a.comment,
+          statLine: a.statLine,
+          sessionLabel,
+          imageUrl: actorImages.get(a.actorName),
+        });
+        return { name: `award-${i}.png`, title: a.title, data };
+      } catch {
+        return null;
+      }
+    }),
+  );
+  return cards.filter((c): c is { name: string; title: string; data: Buffer } => c !== null);
+}
+
 export type AwardCardInput = {
   title: string;
   actorName: string;
