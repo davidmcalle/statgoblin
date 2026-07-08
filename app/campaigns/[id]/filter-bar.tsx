@@ -32,6 +32,8 @@ const BY = [
   { value: "player", label: "By player" },
 ];
 
+type Item = { value: string; label: string };
+
 // URL-param driven filters: the server page re-queries on navigation, so
 // every panel below reflects the selection. Base UI's Select renders labels
 // from the `items` map passed to the root.
@@ -118,7 +120,7 @@ export function FilterBar({
   ].filter(Boolean).length;
 
   return (
-    <div className="w-full sm:w-auto">
+    <div className="w-full">
       <Button
         variant="outline"
         size="sm"
@@ -129,143 +131,118 @@ export function FilterBar({
         Filters
         {activeCount > 0 && ` (${activeCount})`}
       </Button>
+      {/* Micro-labelled fields in an aligned grid — every control says what
+          it filters instead of relying on its placeholder value. */}
       <div
-        className={`${open ? "grid" : "hidden"} mt-2 grid-cols-2 gap-2 sm:mt-0 sm:flex sm:flex-wrap sm:items-center`}
+        className={`${open ? "grid" : "hidden"} mt-2 grid-cols-2 gap-x-2 gap-y-3 sm:mt-0 sm:grid sm:grid-cols-3 lg:grid-cols-4`}
       >
-      {showPcSelect && (
-        <Select
-          items={pcItems}
-          value={pcActors.includes(current.actor ?? "") ? current.actor! : ALL}
-          onValueChange={(v) => setParam("actor", v ?? ALL)}
-        >
-          <SelectTrigger className="w-full sm:w-44">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {pcItems.map((i) => (
-              <SelectItem key={i.value} value={i.value}>
-                {i.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      )}
+        {showPcSelect && (
+          <FilterField label="Character">
+            <FilterSelect
+              items={pcItems}
+              value={pcActors.includes(current.actor ?? "") ? current.actor! : ALL}
+              onChange={(v) => setParam("actor", v)}
+            />
+          </FilterField>
+        )}
 
-      {showMonsterSelect && (
-        <Select
-          items={monsterItems}
-          value={monsterActors.includes(current.actor ?? "") ? current.actor! : ALL}
-          onValueChange={(v) => setParam("actor", v ?? ALL)}
-        >
-          <SelectTrigger className="w-full sm:w-48">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {monsterItems.map((i) => (
-              <SelectItem key={i.value} value={i.value}>
-                {i.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      )}
+        {showMonsterSelect && (
+          <FilterField label="Monster / NPC">
+            <FilterSelect
+              items={monsterItems}
+              value={monsterActors.includes(current.actor ?? "") ? current.actor! : ALL}
+              onChange={(v) => setParam("actor", v)}
+            />
+          </FilterField>
+        )}
 
-      <Select
-        items={kindItems}
-        value={current.kind ?? ALL}
-        onValueChange={(v) => setParam("kind", v ?? ALL)}
-      >
-        <SelectTrigger className="w-full sm:w-44">
-          <SelectValue />
-        </SelectTrigger>
-        <SelectContent>
-          {kindItems.map((i) => (
-            <SelectItem key={i.value} value={i.value}>
-              {i.label}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
+        <FilterField label="Who">
+          <FilterSelect
+            items={kindItems}
+            value={current.kind ?? ALL}
+            onChange={(v) => setParam("kind", v)}
+          />
+        </FilterField>
 
-      <Select
-        items={typeItems}
-        value={current.type ?? ALL}
-        onValueChange={(v) => setParam("type", v ?? ALL)}
-      >
-        <SelectTrigger className="w-full sm:w-40">
-          <SelectValue />
-        </SelectTrigger>
-        <SelectContent>
-          {typeItems.map((i) => (
-            <SelectItem key={i.value} value={i.value}>
-              {i.label}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
+        <FilterField label="Roll type">
+          <FilterSelect
+            items={typeItems}
+            value={current.type ?? ALL}
+            onChange={(v) => setParam("type", v)}
+          />
+        </FilterField>
 
-      <Select
-        items={timeItems}
-        value={current.days ?? ALL}
-        onValueChange={(v) => setParam("days", v ?? ALL)}
-      >
-        <SelectTrigger className="w-full sm:w-40">
-          <SelectValue />
-        </SelectTrigger>
-        <SelectContent>
-          {timeItems.map((i) => (
-            <SelectItem key={i.value} value={i.value}>
-              {i.label}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
+        <FilterField label="Timeframe">
+          <FilterSelect
+            items={timeItems}
+            value={current.days ?? ALL}
+            onChange={(v) => setParam("days", v)}
+          />
+        </FilterField>
 
-      <Select
-        items={sessionItems}
-        value={current.session ?? ALL}
-        onValueChange={(v) => setParam("session", v ?? ALL)}
-      >
-        <SelectTrigger className="w-full sm:w-44">
-          <SelectValue />
-        </SelectTrigger>
-        <SelectContent>
-          {sessionItems.map((i) => (
-            <SelectItem key={i.value} value={i.value}>
-              {i.label}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
+        <FilterField label="Session">
+          <FilterSelect
+            items={sessionItems}
+            value={current.session ?? ALL}
+            onChange={(v) => setParam("session", v)}
+          />
+        </FilterField>
 
-      <Select
-        items={BY}
-        value={current.by === "player" ? "player" : "character"}
-        onValueChange={(v) => setParam("by", v === "player" ? "player" : ALL)}
-      >
-        <SelectTrigger className="w-full sm:w-36">
-          <SelectValue />
-        </SelectTrigger>
-        <SelectContent>
-          {BY.map((i) => (
-            <SelectItem key={i.value} value={i.value}>
-              {i.label}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
+        <FilterField label="Group by">
+          <FilterSelect
+            items={BY}
+            value={current.by === "player" ? "player" : "character"}
+            onChange={(v) => setParam("by", v === "player" ? "player" : ALL)}
+          />
+        </FilterField>
 
-      {hasFilters && (
-        <Button
-          variant="ghost"
-          size="sm"
-          className="col-span-2 sm:col-span-1"
-          onClick={() => router.replace(pathname, { scroll: false })}
-        >
-          Clear
-        </Button>
-      )}
+        {hasFilters && (
+          <Button
+            variant="ghost"
+            size="sm"
+            className="col-span-2 self-end justify-self-start sm:col-span-1"
+            onClick={() => router.replace(pathname, { scroll: false })}
+          >
+            Clear filters
+          </Button>
+        )}
       </div>
     </div>
+  );
+}
+
+function FilterField({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="min-w-0">
+      <span className="mb-1 block font-mono text-[10px] tracking-widest text-muted-foreground uppercase">
+        {label}
+      </span>
+      {children}
+    </div>
+  );
+}
+
+function FilterSelect({
+  items,
+  value,
+  onChange,
+}: {
+  items: Item[];
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <Select items={items} value={value} onValueChange={(v) => onChange(v ?? ALL)}>
+      <SelectTrigger className="w-full">
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent>
+        {items.map((i) => (
+          <SelectItem key={i.value} value={i.value}>
+            {i.label}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
   );
 }

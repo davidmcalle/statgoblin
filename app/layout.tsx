@@ -7,22 +7,22 @@ import { D20Mark } from "@/components/logo";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { AppSidebar } from "@/components/app-sidebar";
 import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
-import { Fraunces, Geist_Mono, IBM_Plex_Sans } from "next/font/google";
+import { Alegreya, Alegreya_Sans, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { cn } from "@/lib/utils";
 
-// Type carries the identity: Fraunces for headings, Plex Sans for everything
-// else, mono for keys/codes only.
-const fraunces = Fraunces({
+// Type carries the identity: Alegreya for headings, its companion sans for
+// everything else — a warm, bookish pair that suits a table of dice rollers.
+// Mono stays for keys/codes only.
+const alegreya = Alegreya({
   subsets: ["latin"],
-  variable: "--font-fraunces",
-  axes: ["opsz"],
+  variable: "--font-display",
 });
 
-const plexSans = IBM_Plex_Sans({
+const alegreyaSans = Alegreya_Sans({
   subsets: ["latin"],
-  weight: ["400", "500", "600", "700"],
-  variable: "--font-plex-sans",
+  weight: ["400", "500", "700"],
+  variable: "--font-body",
 });
 
 const geistMono = Geist_Mono({
@@ -56,7 +56,7 @@ export default async function RootLayout({
     <html
       lang="en"
       suppressHydrationWarning
-      className={cn("h-full antialiased font-sans", fraunces.variable, plexSans.variable, geistMono.variable)}
+      className={cn("h-full antialiased font-sans", alegreya.variable, alegreyaSans.variable, geistMono.variable)}
     >
       <body className="min-h-full flex flex-col">
         <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>

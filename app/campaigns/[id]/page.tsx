@@ -283,8 +283,8 @@ export default async function CampaignPage({
         )}
       </div>
 
-      {/* Phones: view toggle first, filters collapse beneath it. */}
-      <div className="flex flex-col-reverse gap-3 sm:flex-row sm:items-start sm:justify-between">
+      {/* View toggle above, labelled filter grid beneath. */}
+      <div className="flex flex-col-reverse gap-4">
         <FilterBar
           pcActors={actors
             .filter((a) => effectiveKind(a) === "pc")

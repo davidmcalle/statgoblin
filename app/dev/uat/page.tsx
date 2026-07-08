@@ -204,7 +204,7 @@ export default async function UatPage({
         </div>
       </div>
 
-      <div className="flex flex-col-reverse gap-3 sm:flex-row sm:items-start sm:justify-between">
+      <div className="flex flex-col-reverse gap-4">
         <FilterBar
           pcActors={UAT_ACTORS.filter((a) => a.kind === "pc").map((a) => a.name).sort()}
           monsterActors={UAT_ACTORS.filter((a) => a.kind !== "pc").map((a) => a.name).sort()}
