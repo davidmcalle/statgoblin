@@ -19,6 +19,8 @@ import {
   sessionLabelOf,
 } from "@/lib/discord";
 import { renderAwardCards } from "@/lib/cards";
+import { generateDialogueAudio, ttsConfigured } from "@/lib/tts";
+import { datesKeyOf } from "@/lib/summary";
 import {
   getOrCreateSummary,
   llmConfigured,
@@ -139,6 +141,8 @@ export type SummaryPreview = {
   cards: { title: string; dataUri: string }[];
   cached: boolean;
   llmConfigured: boolean;
+  ttsConfigured: boolean;
+  hasAudio: boolean;
 };
 
 /**
@@ -170,7 +174,61 @@ export async function previewDiscordSummary(
     })),
     cached,
     llmConfigured: llmConfigured(),
+    ttsConfigured: ttsConfigured(),
+    hasAudio: await prisma.sessionSummary
+      .findUnique({
+        where: { campaignId_datesKey: { campaignId, datesKey: datesKeyOf(dates) } },
+        select: { audio: true },
+      })
+      .then((row) => !!row?.audio),
   };
+}
+
+/**
+ * Creator-only: voice the cached recap dialogue via ElevenLabs and store the
+ * mp3 alongside the summary. Returns the audio for in-dialog playback.
+ * Costs ElevenLabs credits — only ever runs on an explicit click.
+ */
+export async function generateSummaryAudio(
+  campaignId: string,
+  dates: string[],
+): Promise<{ ok: true; dataUri: string } | { ok: false; error: string }> {
+  const userId = await requireUserId();
+  await requireCreator(campaignId, userId);
+  const key = datesKeyOf([...new Set(dates)].sort());
+  const row = await prisma.sessionSummary.findUnique({
+    where: { campaignId_datesKey: { campaignId, datesKey: key } },
+  });
+  if (!row) return { ok: false, error: "Generate the summary first" };
+  const { dialogue } = recapLines(row.payload as SummaryPayload);
+  if (dialogue.length === 0) return { ok: false, error: "This summary has no dialogue to voice" };
+
+  try {
+    const audio = await generateDialogueAudio(dialogue);
+    await prisma.sessionSummary.update({
+      where: { id: row.id },
+      data: { audio: new Uint8Array(audio) },
+    });
+    return { ok: true, dataUri: `data:audio/mpeg;base64,${audio.toString("base64")}` };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Voice generation failed" };
+  }
+}
+
+/** Fetch the cached voice recap for in-dialog playback, if one exists. */
+export async function getSummaryAudio(
+  campaignId: string,
+  dates: string[],
+): Promise<{ dataUri: string } | null> {
+  const userId = await requireUserId();
+  await requireCreator(campaignId, userId);
+  const key = datesKeyOf([...new Set(dates)].sort());
+  const row = await prisma.sessionSummary.findUnique({
+    where: { campaignId_datesKey: { campaignId, datesKey: key } },
+    select: { audio: true },
+  });
+  if (!row?.audio) return null;
+  return { dataUri: `data:audio/mpeg;base64,${Buffer.from(row.audio).toString("base64")}` };
 }
 
 export async function sendDiscordSummary(
@@ -186,11 +244,22 @@ export async function sendDiscordSummary(
 
   const label = sessionLabelOf(payload.sessions);
   const cards = await renderAwardCards(payload.awards, images, label);
+  const files: { name: string; data: Buffer }[] = cards.map(({ name, data }) => ({ name, data }));
+
+  // Voice recap rides along when it's been generated.
+  const audioRow = await prisma.sessionSummary.findUnique({
+    where: {
+      campaignId_datesKey: { campaignId, datesKey: datesKeyOf(payload.sessions.map((s) => s.date)) },
+    },
+    select: { audio: true },
+  });
+  if (audioRow?.audio) files.push({ name: "recap.mp3", data: Buffer.from(audioRow.audio) });
+
   try {
     await postWebhook(
       campaign.discordWebhookUrl,
       [buildSummaryHeaderEmbed(campaign.name, campaign.image, payload)],
-      cards.map(({ name, data }) => ({ name, data })),
+      files,
     );
   } catch (e) {
     return { sent: false, error: e instanceof Error ? e.message : "Failed to reach Discord" };

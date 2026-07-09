@@ -43,7 +43,8 @@ export async function postWebhook(
     const form = new FormData();
     form.append("payload_json", JSON.stringify({ username: "StatGoblin", embeds }));
     files.forEach((f, i) => {
-      form.append(`files[${i}]`, new Blob([new Uint8Array(f.data)], { type: "image/png" }), f.name);
+      const type = f.name.endsWith(".mp3") ? "audio/mpeg" : "image/png";
+      form.append(`files[${i}]`, new Blob([new Uint8Array(f.data)], { type }), f.name);
     });
     res = await fetch(webhookUrl, { method: "POST", body: form });
   }

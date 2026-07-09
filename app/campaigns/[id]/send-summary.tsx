@@ -5,6 +5,8 @@
 import { useState, useTransition } from "react";
 import { Send } from "lucide-react";
 import {
+  generateSummaryAudio,
+  getSummaryAudio,
   previewDiscordSummary,
   sendDiscordSummary,
   type SummaryPreview,
@@ -37,6 +39,7 @@ export function SendSummary({
   const [open, setOpen] = useState(false);
   const [picked, setPicked] = useState<Set<string>>(new Set());
   const [preview, setPreview] = useState<SummaryPreview | null>(null);
+  const [audio, setAudio] = useState<string | null>(null);
   const [status, setStatus] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
@@ -57,13 +60,20 @@ export function SendSummary({
   const generate = (regenerate: boolean) =>
     startTransition(async () => {
       setStatus(null);
+      setAudio(null);
       const result = await previewDiscordSummary(campaignId, [...picked], regenerate);
-      if (result.ok) setPreview(result);
-      else setStatus(result.error);
+      if (result.ok) {
+        setPreview(result);
+        if (result.hasAudio && !regenerate) {
+          const existing = await getSummaryAudio(campaignId, [...picked]);
+          if (existing) setAudio(existing.dataUri);
+        }
+      } else setStatus(result.error);
     });
 
   const reset = () => {
     setPreview(null);
+    setAudio(null);
     setStatus(null);
   };
 
@@ -225,6 +235,32 @@ export function SendSummary({
                         className="w-full rounded-md border border-border"
                       />
                     ))}
+                  </div>
+                )}
+
+                {preview.dialogue.length > 0 && preview.ttsConfigured && (
+                  <div className="space-y-2">
+                    <h3 className="font-mono text-[10px] tracking-widest text-muted-foreground uppercase">
+                      Voice recap
+                    </h3>
+                    {audio ? (
+                      <audio controls src={audio} className="w-full" />
+                    ) : (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={pending}
+                        onClick={() =>
+                          startTransition(async () => {
+                            const result = await generateSummaryAudio(campaignId, [...picked]);
+                            if (result.ok) setAudio(result.dataUri);
+                            else setStatus(result.error);
+                          })
+                        }
+                      >
+                        {pending ? "Voicing…" : "Generate Voice"}
+                      </Button>
+                    )}
                   </div>
                 )}
               </div>

@@ -194,6 +194,8 @@ model SessionSummary {
   // Sorted session dates joined with "," — the cache key for a selection.
   datesKey   String   @map("dates_key")
   payload    Json
+  // Voice recap (mp3) — generated on demand, cached like the text.
+  audio      Bytes?
   createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
 
   @@unique([campaignId, datesKey])

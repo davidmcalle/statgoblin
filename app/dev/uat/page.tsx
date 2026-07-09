@@ -49,6 +49,7 @@ import {
 } from "@/lib/dnd5e-meta";
 import { SKILL_NAMES as SKILL_LABELS } from "@/lib/dnd5e-meta";
 import { Badge } from "@/components/ui/badge";
+import { VoiceTest } from "./voice-test";
 
 const FALLBACK = "#6b7280";
 
@@ -315,6 +316,8 @@ export default async function UatPage({
           <DeathSavesCard saves={deathSaves} />
         </>
       )}
+
+      <VoiceTest />
     </main>
   );
 }

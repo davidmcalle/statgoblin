@@ -37,8 +37,21 @@ export type Award = {
 /** Named-count pairs: "Fireball ×3", "Sneak Attack ×5", "Stealth ×4"… */
 type Tally = { name: string; count: number };
 
+/**
+ * Speakable short form: PCs and NPCs go by first name ("Lucia
+ * Steorr'Pleiades" → "Lucia"); monsters keep their descriptive name.
+ */
+export function shortNameOf(name: string, kind: "pc" | "npc" | "monster"): string {
+  if (kind === "monster") return name;
+  const first = name.split(/\s+/)[0] ?? name;
+  // Apostrophe-compound first names get clipped to the part before it.
+  return first.includes("'") && first.length > 8 ? first.split("'")[0] : first;
+}
+
 export type CharacterDetail = {
   name: string;
+  /** What the narrators call them — first name for people. */
+  shortName: string;
   kind: "pc" | "npc" | "monster";
   cr: number | null;
   rolls: number;
@@ -276,9 +289,11 @@ async function characterDetails(
     if (!d) {
       const s = statByName.get(name);
       const meta = kindOf.get(name);
+      const kind = meta?.kind ?? "monster";
       d = {
         name,
-        kind: meta?.kind ?? "monster",
+        shortName: shortNameOf(name, kind),
+        kind,
         cr: meta?.cr ?? null,
         rolls: s?.allRolls ?? 0,
         avgD20: s?.avgD20 ?? null,
@@ -418,6 +433,8 @@ async function generateNarrative(
   if (!apiKey || apiKey === "change-me") return null;
   try {
     const client = new Anthropic();
+    const shortOf = new Map(characters.map((c) => [c.name, c.shortName]));
+    const short = (name: string | null) => (name ? (shortOf.get(name) ?? name) : name);
     const packet = {
       campaign: campaignName,
       sessions: sessions.map((s) => ({ n: s.n, date: s.date, rolls: s.rolls })),
@@ -429,13 +446,16 @@ async function generateNarrative(
         key,
         title,
         actorName,
+        shortName: short(actorName),
         statLine,
         side: kind ?? "pc",
       })),
       favouriteItems: items.slice(0, 5),
-      bestRolls: notables.best,
-      worstRolls: notables.worst,
-      biggestHit: notables.biggestHit,
+      bestRolls: notables.best.map((n) => ({ ...n, shortName: short(n.actorName) })),
+      worstRolls: notables.worst.map((n) => ({ ...n, shortName: short(n.actorName) })),
+      biggestHit: notables.biggestHit
+        ? { ...notables.biggestHit, shortName: short(notables.biggestHit.actorName) }
+        : null,
       previousRecaps: banterHistory || "(none yet — this is their first recap together)",
     };
     const response = await client.messages.parse({
@@ -468,9 +488,11 @@ async function generateNarrative(
         "infer playstyle: healing stacks read cleric, Sneak Attack reads rogue, bow plus " +
         "nature-y skills reads ranger. Weave real names and counts in. Notice the shape of " +
         "the luck: crit droughts, nat-1 floods, suspiciously average d20s.\n\n" +
-        "Talk about characters in the third person. Do not invent story events — you only " +
-        "know what the dice did. Session numbers only mark when roll-tracking started, not " +
-        "campaign age — never call anything a debut or a young campaign. British English.",
+        "Talk about characters in the third person and ALWAYS call them by their `shortName` " +
+        "(\"Lucia\", never \"Lucia Steorr'Pleiades\") — these lines get read aloud, so no " +
+        "surnames, no apostrophe-riddled fantasy mouthfuls. Do not invent story events — you " +
+        "only know what the dice did. Session numbers only mark when roll-tracking started, " +
+        "not campaign age — never call anything a debut or a young campaign. British English.",
       messages: [
         {
           role: "user",
