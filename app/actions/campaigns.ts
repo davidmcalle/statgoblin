@@ -19,7 +19,13 @@ import {
   sessionLabelOf,
 } from "@/lib/discord";
 import { renderAwardCards } from "@/lib/cards";
-import { getOrCreateSummary, llmConfigured, type SummaryPayload } from "@/lib/summary";
+import {
+  getOrCreateSummary,
+  llmConfigured,
+  recapLines,
+  type DialogueLine,
+  type SummaryPayload,
+} from "@/lib/summary";
 import { sessions } from "@/lib/stats";
 import { sessionDayFrom } from "@/lib/session-day";
 
@@ -126,8 +132,8 @@ async function summaryFor(
 export type SummaryPreview = {
   ok: true;
   label: string;
-  narrative: string | null;
-  highlights: string[];
+  dialogue: DialogueLine[];
+  highlights: DialogueLine[];
   totals: SummaryPayload["totals"];
   notables: SummaryPayload["notables"];
   cards: { title: string; dataUri: string }[];
@@ -150,11 +156,12 @@ export async function previewDiscordSummary(
   const { payload, images, cached } = result;
   const label = sessionLabelOf(payload.sessions);
   const cards = await renderAwardCards(payload.awards, images, label);
+  const lines = recapLines(payload);
   return {
     ok: true,
     label,
-    narrative: payload.narrative,
-    highlights: payload.highlights ?? [],
+    dialogue: lines.dialogue,
+    highlights: lines.highlights,
     totals: payload.totals,
     notables: payload.notables,
     cards: cards.map((c) => ({

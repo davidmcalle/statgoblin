@@ -18,12 +18,19 @@ import {
 // data, an optional Claude-written narrative + per-award commentary on top,
 // and the whole result cached in session_summaries so resends are free.
 
+export type Speaker = "zog" | "zaela";
+
+export type DialogueLine = { speaker: Speaker; line: string };
+
+export const SPEAKER_NAMES: Record<Speaker, string> = { zog: "Zog", zaela: "Zaela" };
+
 export type Award = {
   key: string;
   title: string;
   actorName: string;
   statLine: string;
   comment?: string;
+  commentBy?: Speaker;
   kind?: "pc" | "npc" | "monster";
 };
 
@@ -58,8 +65,11 @@ export type SummaryPayload = {
     highest: { total: number; actorName: string | null } | null;
   };
   awards: Award[];
+  /** Legacy single-voice recap (payloads generated before the duo). */
   narrative: string | null;
-  highlights?: string[];
+  /** The Zog & Zaela exchange — the recap body from v2 payloads on. */
+  dialogue?: DialogueLine[];
+  highlights?: (string | DialogueLine)[];
   notables?: {
     best: NotableRoll[];
     worst: NotableRoll[];
@@ -326,27 +336,36 @@ async function rollDiversity(campaignId: string, dates: string[]): Promise<Map<s
   return new Map([...sets.entries()].map(([name, set]) => [name, set.size]));
 }
 
+const speakerSchema = z.enum(["zog", "zaela"]);
+
 const narrativeSchema = z.object({
-  narrative: z
-    .string()
+  dialogue: z
+    .array(
+      z.object({
+        speaker: speakerSchema,
+        line: z.string().describe("One natural spoken line — no stage directions"),
+      }),
+    )
     .describe(
-      "2-3 short paragraphs of the goblin reading the session's dice back to the party — " +
-        "third person about the characters, crude and funny",
+      "6-12 lines of natural back-and-forth between Zog and Zaela recapping the session's " +
+        "dice — a real conversation, not alternating monologues. They interrupt, disagree, " +
+        "and pick up threads from their previous recaps.",
     ),
   awardComments: z
     .array(
       z.object({
         key: z.string().describe("The award key this comment belongs to"),
-        comment: z.string().describe("One punchy goblin heckle for this award"),
+        speaker: speakerSchema.describe("Who delivers it"),
+        comment: z.string().describe("One punchy in-character line for this award"),
       }),
     )
-    .describe("One comment per award, matched by key"),
+    .describe("One comment per award, matched by key — split them between the two speakers"),
   highlights: z
-    .array(z.string())
+    .array(z.object({ speaker: speakerSchema, line: z.string() }))
     .describe(
-      "2-4 extra jabs about the dice that the awards missed — a total crit drought, a flood " +
-        "of nat 1s, one character hogging all the healing, a suspiciously fair d20, whatever " +
-        "stands out. One sentence each, crude encouraged.",
+      "2-4 extra observations about the dice the awards missed — a crit drought, a flood of " +
+        "nat 1s, someone hogging the healing, a suspiciously fair d20. One line each, in " +
+        "character for whoever says it.",
     ),
 });
 
@@ -355,6 +374,32 @@ const narrativeSchema = z.object({
  * account ids ever enter the prompt. Absent API key or any failure returns
  * null and the caller falls back to the plain stat summary.
  */
+/**
+ * Compact banter history from earlier summaries, so Zog and Zaela pick up
+ * where they left off — running opinions on characters, callbacks, grudges.
+ */
+async function previousBanter(campaignId: string, excludeKey: string) {
+  const prior = await prisma.sessionSummary.findMany({
+    where: { campaignId, datesKey: { not: excludeKey } },
+    orderBy: { createdAt: "desc" },
+    take: 3,
+  });
+  return prior
+    .map((row) => {
+      const p = row.payload as SummaryPayload;
+      const label =
+        p.sessions?.length === 1 ? `Session ${p.sessions[0].n}` : `Sessions ${p.sessions?.map((s) => s.n).join(", ")}`;
+      const lines = p.dialogue
+        ? p.dialogue.map((l) => `${SPEAKER_NAMES[l.speaker]}: ${l.line}`).join("\n")
+        : (p.narrative ?? "");
+      return lines ? `— ${label} —\n${lines}` : null;
+    })
+    .filter((s): s is string => !!s)
+    .reverse()
+    .join("\n\n")
+    .slice(0, 6000);
+}
+
 async function generateNarrative(
   campaignName: string,
   sessions: SessionInfo[],
@@ -363,7 +408,12 @@ async function generateNarrative(
   awards: Award[],
   items: { itemName: string; uses: number }[],
   notables: NonNullable<SummaryPayload["notables"]>,
-): Promise<{ narrative: string; comments: Map<string, string>; highlights: string[] } | null> {
+  banterHistory: string,
+): Promise<{
+  dialogue: DialogueLine[];
+  comments: Map<string, { speaker: Speaker; comment: string }>;
+  highlights: DialogueLine[];
+} | null> {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey || apiKey === "change-me") return null;
   try {
@@ -386,37 +436,45 @@ async function generateNarrative(
       bestRolls: notables.best,
       worstRolls: notables.worst,
       biggestHit: notables.biggestHit,
+      previousRecaps: banterHistory || "(none yet — this is their first recap together)",
     };
     const response = await client.messages.parse({
       model: "claude-opus-4-8",
-      max_tokens: 2500,
+      max_tokens: 3000,
       thinking: { type: "adaptive" },
       system:
-        "You are a filthy drunk goblin who watched the whole D&D session from under the table " +
-        "and is now bellowing the party's dice results back at them in the tavern. This is an " +
-        "adult table and they've asked for it: swear hard and often, be as crass, crude and " +
-        "vulgar as you like — piss, shit, shag, whatever serves the heckle. Nothing is too " +
-        "vulgar. Mock the party's failures viciously, toast their wins grudgingly, and talk " +
-        "about the characters in the third person. Never speak as the dice, never be " +
-        "sentimental, never soften. British English, gutter register.\n\n" +
-        "Sides matter: `party` are the so-called heroes. `monsters` are the opposition — their " +
-        "damage is damage the party TOOK, their attacks are threats, their deaths are wins; " +
-        "never narrate a monster as a team player. `friendlyNpcs` are allies. A monster's name " +
-        "usually says what it is (a Giant Spider is a giant bloody spider, a lich is a lich) — " +
-        "use that flavour.\n\n" +
-        "Read the loadouts: each character lists attacks (by weapon, with counts), spells cast, " +
-        "features used, skills rolled and saves made. Infer playstyle — stacks of healing " +
-        "spells reads cleric, Sneak Attack reads rogue, bow plus nature-y skills reads ranger — " +
-        "and weave the actual names and counts in (\"three sodding Fireballs\", \"Sneak Attack " +
-        "×5\"). Notice the shape of the luck: no crits all night deserves mockery, a pile of " +
-        "nat 1s a conspiracy theory, a dead-average d20 an accusation of cowardice.\n\n" +
-        "Do not invent story events — you only know what the dice did. The session numbers " +
-        "only mark when roll-tracking started, not how old the campaign is — never call " +
-        "anything a debut, a first session, or a young campaign.",
+        "You write the double act that recaps a D&D group's dice statistics on Discord: " +
+        "ZOG, a filthy drunk goblin, and ZAELA, an elf cleric — regulars at the same tavern " +
+        "table, bickering their way through the party's results.\n\n" +
+        "Zog: crass, crude, vulgar, loud. This is an adult table and they've asked for it — " +
+        "he swears hard and often (piss, shit, shag, whatever serves the heckle); nothing is " +
+        "too vulgar for him. He mocks failures viciously and toasts wins grudgingly.\n" +
+        "Zaela: fun, kind, polite — she defends the party, celebrates their wins, scolds Zog " +
+        "(\"Hey now Zog!\", \"you miserable sod\") without ever matching his filth. She's " +
+        "warm but not soppy, and she's allowed to be funny.\n\n" +
+        "They COUNTER each other — a real conversation with interruptions, comebacks and " +
+        "running jokes, not two monologues. Example register:\n" +
+        "Zog: \"Another shitshow from Maeple, useless as always.\"\n" +
+        "Zaela: \"Hey now Zog! She's not that bad you miserable sod — did you not see the " +
+        "damage she did? Much better than last week.\"\n\n" +
+        "`previousRecaps` holds their earlier conversations about this campaign. Continue " +
+        "that relationship: keep running opinions on characters, call back to past sessions " +
+        "(\"better than last week\"), hold grudges, concede points. If it's empty, just start " +
+        "the double act.\n\n" +
+        "Sides matter: `party` are the heroes, `monsters` the opposition — monster damage is " +
+        "damage the party TOOK; never narrate a monster as a team player. `friendlyNpcs` are " +
+        "allies. A monster's name usually says what it is — use that flavour. Read the " +
+        "loadouts (attacks by weapon, spells, features, skills, saves — all with counts) and " +
+        "infer playstyle: healing stacks read cleric, Sneak Attack reads rogue, bow plus " +
+        "nature-y skills reads ranger. Weave real names and counts in. Notice the shape of " +
+        "the luck: crit droughts, nat-1 floods, suspiciously average d20s.\n\n" +
+        "Talk about characters in the third person. Do not invent story events — you only " +
+        "know what the dice did. Session numbers only mark when roll-tracking started, not " +
+        "campaign age — never call anything a debut or a young campaign. British English.",
       messages: [
         {
           role: "user",
-          content: `Write the recap and one comment per award for this data:\n${JSON.stringify(packet)}`,
+          content: `Write the recap dialogue, one comment per award, and the highlights for this data:\n${JSON.stringify(packet)}`,
         },
       ],
       output_config: { format: zodOutputFormat(narrativeSchema) },
@@ -424,15 +482,39 @@ async function generateNarrative(
     const parsed = response.parsed_output;
     if (!parsed) return null;
     return {
-      narrative: parsed.narrative,
-      comments: new Map(parsed.awardComments.map((c) => [c.key, c.comment])),
+      dialogue: parsed.dialogue,
+      comments: new Map(
+        parsed.awardComments.map((c) => [c.key, { speaker: c.speaker, comment: c.comment }]),
+      ),
       highlights: parsed.highlights,
     };
   } catch (error) {
-    // Narrative is garnish — never block the summary on the LLM. But say why.
+    // The banter is garnish — never block the summary on the LLM. But say why.
     console.error("summary narrative generation failed:", error);
     return null;
   }
+}
+
+/**
+ * Uniform view over old and new payloads: pre-duo summaries carried a plain
+ * narrative string and string highlights; those render as Zog solo.
+ */
+export function recapLines(payload: SummaryPayload): {
+  dialogue: DialogueLine[];
+  highlights: DialogueLine[];
+} {
+  const dialogue =
+    payload.dialogue ??
+    (payload.narrative
+      ? payload.narrative
+          .split(/\n{2,}/)
+          .filter(Boolean)
+          .map((line) => ({ speaker: "zog" as const, line }))
+      : []);
+  const highlights = (payload.highlights ?? []).map((h) =>
+    typeof h === "string" ? { speaker: "zog" as const, line: h } : h,
+  );
+  return { dialogue, highlights };
 }
 
 /** Whether narrative generation is available at all. */
@@ -499,10 +581,24 @@ export async function getOrCreateSummary(
       : null,
   };
 
-  const llm = await generateNarrative(campaignName, picked, slimTotals, characters, awards, items, notables);
+  const banterHistory = await previousBanter(campaignId, key);
+  const llm = await generateNarrative(
+    campaignName,
+    picked,
+    slimTotals,
+    characters,
+    awards,
+    items,
+    notables,
+    banterHistory,
+  );
   if (llm) {
     for (const award of awards) {
-      award.comment = llm.comments.get(award.key);
+      const c = llm.comments.get(award.key);
+      if (c) {
+        award.comment = c.comment;
+        award.commentBy = c.speaker;
+      }
     }
   }
 
@@ -511,7 +607,8 @@ export async function getOrCreateSummary(
     sessions: picked,
     totals: slimTotals,
     awards,
-    narrative: llm?.narrative ?? null,
+    narrative: null,
+    dialogue: llm?.dialogue ?? undefined,
     highlights: llm?.highlights ?? [],
     notables,
     generatedAt: new Date().toISOString(),

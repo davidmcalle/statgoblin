@@ -156,17 +156,28 @@ export function SendSummary({
                   )}
                 </div>
 
-                {preview.narrative ? (
+                {preview.dialogue.length > 0 ? (
                   <div className="space-y-2 border-l-2 border-border pl-3 text-foreground">
-                    {preview.narrative.split(/\n{2,}/).map((p, i) => (
-                      <p key={i}>{p}</p>
+                    {preview.dialogue.map((l, i) => (
+                      <p key={i}>
+                        <span
+                          className={
+                            l.speaker === "zog"
+                              ? "font-bold text-green-700 dark:text-green-500"
+                              : "font-bold text-sky-700 dark:text-sky-400"
+                          }
+                        >
+                          {l.speaker === "zog" ? "Zog" : "Zaela"}:
+                        </span>{" "}
+                        {l.line}
+                      </p>
                     ))}
                   </div>
                 ) : (
                   <p className="text-muted-foreground">
                     {preview.llmConfigured
-                      ? "No narrative in this version — it was generated before the API key was set, or the generation failed (check server logs). Hit Regenerate to write one."
-                      : "No narrative — the app has no Anthropic API key configured, so this will post as plain stats."}
+                      ? "No recap in this version — it was generated before the API key was set, or the generation failed (check server logs). Hit Regenerate."
+                      : "No recap — the app has no Anthropic API key configured, so this will post as plain stats."}
                   </p>
                 )}
 
@@ -193,7 +204,12 @@ export function SendSummary({
                     </h3>
                     <ul className="list-inside list-disc space-y-0.5 text-muted-foreground">
                       {preview.highlights.map((h, i) => (
-                        <li key={i}>{h}</li>
+                        <li key={i}>
+                          <span className="font-semibold text-foreground">
+                            {h.speaker === "zog" ? "Zog" : "Zaela"}:
+                          </span>{" "}
+                          {h.line}
+                        </li>
                       ))}
                     </ul>
                   </div>

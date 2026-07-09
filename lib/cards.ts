@@ -47,7 +47,13 @@ const el = (type: string, style: Record<string, unknown>, children?: unknown, re
 
 /** Render the card set for a summary's awards; a failed card is skipped. */
 export async function renderAwardCards(
-  awards: { title: string; actorName: string; comment?: string; statLine: string }[],
+  awards: {
+    title: string;
+    actorName: string;
+    comment?: string;
+    commentBy?: "zog" | "zaela";
+    statLine: string;
+  }[],
   actorImages: Map<string, string>,
   sessionLabel: string,
 ): Promise<{ name: string; title: string; data: Buffer }[]> {
@@ -58,6 +64,7 @@ export async function renderAwardCards(
           title: a.title,
           actorName: a.actorName,
           comment: a.comment,
+          attribution: a.comment ? (a.commentBy === "zaela" ? "— Zaela" : "— Zog") : undefined,
           statLine: a.statLine,
           sessionLabel,
           imageUrl: actorImages.get(a.actorName),
@@ -75,6 +82,8 @@ export type AwardCardInput = {
   title: string;
   actorName: string;
   comment?: string;
+  /** Who said the comment, e.g. "— Zog". */
+  attribution?: string;
   statLine: string;
   sessionLabel: string;
   imageUrl?: string;
@@ -153,7 +162,13 @@ export async function renderAwardCard(input: AwardCardInput): Promise<Buffer> {
           el("div", { color: "#7fd6a4", fontSize: 21, fontWeight: 700, letterSpacing: 1.5, textTransform: "uppercase" }, input.title),
           el("div", { color: "#ffffff", fontSize: 34, fontWeight: 700, lineHeight: 1.1, marginTop: 6 }, input.actorName),
           ...(input.comment
-            ? [el("div", { color: "rgba(255,255,255,0.92)", fontSize: 21, lineHeight: 1.35, marginTop: 12 }, `“${input.comment}”`)]
+            ? [
+                el(
+                  "div",
+                  { color: "rgba(255,255,255,0.92)", fontSize: 21, lineHeight: 1.35, marginTop: 12 },
+                  `“${input.comment}”${input.attribution ? ` ${input.attribution}` : ""}`,
+                ),
+              ]
             : []),
           el("div", { color: "rgba(255,255,255,0.6)", fontSize: 17, marginTop: 12 }, input.statLine),
         ],

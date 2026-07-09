@@ -1,3 +1,5 @@
+import { recapLines, SPEAKER_NAMES, type SummaryPayload } from "@/lib/summary";
+
 // Discord webhook plumbing for "Send summary". Plain fetch against the
 // campaign's webhook URL — no bot, no OAuth; the GM mints the webhook in
 // their own server and pastes it into settings.
@@ -71,18 +73,10 @@ export function sessionLabelOf(sessions: { n: number; date: string }[]): string 
 export function buildSummaryHeaderEmbed(
   campaignName: string,
   campaignImage: string,
-  payload: {
-    sessions: { n: number; date: string }[];
-    totals: { totalRolls: number; nat20s: number; nat1s: number; avgD20: number | null };
-    narrative: string | null;
-    highlights?: string[];
-    notables?: {
-      best: { actorName: string; total: number; d20: number; label: string }[];
-      biggestHit: { actorName: string; damage: number; itemName: string | null } | null;
-    };
-  },
+  payload: SummaryPayload,
 ): object {
-  const { sessions, totals, narrative, highlights, notables } = payload;
+  const { sessions, totals, notables } = payload;
+  const { dialogue, highlights } = recapLines(payload);
 
   const headline = [
     `🎲 **${totals.totalRolls}** rolls`,
@@ -93,9 +87,13 @@ export function buildSummaryHeaderEmbed(
     .filter(Boolean)
     .join(" · ");
 
+  const banter = dialogue
+    .map((l) => `**${SPEAKER_NAMES[l.speaker]}:** ${l.line}`)
+    .join("\n\n");
+
   const header: Record<string, unknown> = {
     title: `${campaignName} — ${sessionLabelOf(sessions)}`,
-    description: [narrative, headline].filter(Boolean).join("\n\n").slice(0, 4000),
+    description: [banter, headline].filter(Boolean).join("\n\n").slice(0, 4000),
     color: EMBED_COLOR,
     footer: { text: "StatGoblin" },
   };
@@ -111,8 +109,14 @@ export function buildSummaryHeaderEmbed(
     }
     fields.push({ name: "Top rolls", value: lines.join("\n").slice(0, 1024) });
   }
-  if (highlights?.length) {
-    fields.push({ name: "Highlights", value: highlights.map((h) => `• ${h}`).join("\n").slice(0, 1024) });
+  if (highlights.length) {
+    fields.push({
+      name: "Highlights",
+      value: highlights
+        .map((h) => `• **${SPEAKER_NAMES[h.speaker]}:** ${h.line}`)
+        .join("\n")
+        .slice(0, 1024),
+    });
   }
   if (fields.length) header.fields = fields;
 
