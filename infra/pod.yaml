@@ -39,6 +39,18 @@ spec:
         # summaries. Leave as change-me to send plain stat summaries instead.
         - name: ANTHROPIC_API_KEY
           value: change-me
+        # Required for storing Discord webhooks (encrypted at rest).
+        # Generate once with: openssl rand -hex 32 — and never rotate casually:
+        # a new key orphans stored webhooks (GMs must re-paste them).
+        - name: ENCRYPTION_KEY
+          value: change-me
+        # Optional: voice recaps (ElevenLabs text-to-dialogue).
+        - name: ELEVENLABS_API_KEY
+          value: change-me
+        - name: ELEVENLABS_VOICE_ZOG
+          value: change-me
+        - name: ELEVENLABS_VOICE_ZAELA
+          value: change-me
 
   volumes:
     - name: pgdata

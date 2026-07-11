@@ -428,7 +428,15 @@ export default async function CampaignPage({
 
       {isCreator && (
         <CampaignSettings
-          campaign={campaign}
+          campaign={{
+            id: campaign.id,
+            name: campaign.name,
+            image: campaign.image,
+            inviteCode: campaign.inviteCode,
+            hideDeathSaves: campaign.hideDeathSaves,
+            // Secret stays server-side; the panel only needs to know it exists.
+            hasDiscordWebhook: !!campaign.discordWebhookUrl,
+          }}
           members={members}
           apiKeys={campaign.apiKeys.map((k) => ({
             id: k.id,

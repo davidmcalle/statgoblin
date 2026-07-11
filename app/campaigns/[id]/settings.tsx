@@ -6,6 +6,7 @@ import {
   createApiKey,
   deleteApiKey,
   deleteCampaign,
+  removeDiscordWebhook,
   removeMember,
   setHideDeathSaves,
   updateCampaign,
@@ -22,7 +23,8 @@ type Campaign = {
   image: string;
   inviteCode: string;
   hideDeathSaves: boolean;
-  discordWebhookUrl: string;
+  /** Whether a webhook is stored — the URL itself never leaves the server. */
+  hasDiscordWebhook: boolean;
 };
 
 export type ApiKeyRow = {
@@ -95,14 +97,31 @@ export function CampaignSettings({
           <span className="text-sm font-semibold">Discord webhook URL</span>
           <p className="text-xs text-muted-foreground">
             In your Discord server: channel → Integrations → Webhooks → New Webhook → Copy URL.
-            Enables &quot;Send summary to Discord&quot;.
+            Enables &quot;Send summary to Discord&quot;. Stored encrypted and never shown again —
+            leave blank to keep the current one.
           </p>
-          <Input
-            name="discordWebhookUrl"
-            defaultValue={campaign.discordWebhookUrl}
-            placeholder="https://discord.com/api/webhooks/…"
-            className="mt-1 w-full"
-          />
+          <div className="mt-1 flex gap-2">
+            <Input
+              name="discordWebhookUrl"
+              defaultValue=""
+              placeholder={
+                campaign.hasDiscordWebhook
+                  ? "configured ✓ — paste a new URL to replace"
+                  : "https://discord.com/api/webhooks/…"
+              }
+              className="w-full"
+            />
+            {campaign.hasDiscordWebhook && (
+              <button
+                type="button"
+                disabled={pending}
+                onClick={() => startTransition(() => removeDiscordWebhook(campaign.id))}
+                className="shrink-0 rounded border border-red-300 px-2 py-0.5 text-xs text-red-600 disabled:opacity-50 dark:border-red-800"
+              >
+                Remove
+              </button>
+            )}
+          </div>
         </label>
         <button
           disabled={pending}

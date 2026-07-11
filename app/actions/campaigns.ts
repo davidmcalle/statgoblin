@@ -18,6 +18,7 @@ import {
   postWebhook,
   sessionLabelOf,
 } from "@/lib/discord";
+import { decryptSecret, encryptSecret, encryptionConfigured } from "@/lib/secretbox";
 import { renderAwardCards } from "@/lib/cards";
 import { generateDialogueAudio, ttsConfigured } from "@/lib/tts";
 import { datesKeyOf } from "@/lib/summary";
@@ -70,7 +71,11 @@ export async function joinCampaign(inviteCode: string): Promise<void> {
   redirect(`/campaigns/${campaign.id}`);
 }
 
-/** Creator-only: rename / set image / Discord webhook. */
+/**
+ * Creator-only: rename / set image / Discord webhook. The webhook is a
+ * secret: it's encrypted at rest and never echoed back to the browser, so a
+ * blank input means "keep the current one" — removal is its own action.
+ */
 export async function updateCampaign(campaignId: string, formData: FormData): Promise<void> {
   const userId = await requireUserId();
   await requireCreator(campaignId, userId);
@@ -85,9 +90,28 @@ export async function updateCampaign(campaignId: string, formData: FormData): Pr
   if (discordWebhookUrl && !isValidWebhookUrl(discordWebhookUrl)) {
     throw new Error("That doesn't look like a Discord webhook URL");
   }
+  if (discordWebhookUrl && !encryptionConfigured()) {
+    throw new Error("Server is missing ENCRYPTION_KEY — webhook can't be stored securely");
+  }
   await prisma.campaign.update({
     where: { id: campaignId },
-    data: { name, image, discordWebhookUrl, activityAt: new Date() },
+    data: {
+      name,
+      image,
+      ...(discordWebhookUrl ? { discordWebhookUrl: encryptSecret(discordWebhookUrl) } : {}),
+      activityAt: new Date(),
+    },
+  });
+  revalidatePath(`/campaigns/${campaignId}`);
+}
+
+/** Creator-only: forget the stored Discord webhook. */
+export async function removeDiscordWebhook(campaignId: string): Promise<void> {
+  const userId = await requireUserId();
+  await requireCreator(campaignId, userId);
+  await prisma.campaign.update({
+    where: { id: campaignId },
+    data: { discordWebhookUrl: "" },
   });
   revalidatePath(`/campaigns/${campaignId}`);
 }
@@ -241,6 +265,15 @@ export async function sendDiscordSummary(
   if (!campaign.discordWebhookUrl) {
     return { sent: false, error: "Set a Discord webhook URL in campaign settings first" };
   }
+  let webhookUrl: string;
+  try {
+    webhookUrl = decryptSecret(campaign.discordWebhookUrl);
+  } catch {
+    return {
+      sent: false,
+      error: "Stored webhook can't be decrypted (ENCRYPTION_KEY changed?) — re-add it in settings",
+    };
+  }
 
   const label = sessionLabelOf(payload.sessions);
   const cards = await renderAwardCards(payload.awards, images, label);
@@ -257,7 +290,7 @@ export async function sendDiscordSummary(
 
   try {
     await postWebhook(
-      campaign.discordWebhookUrl,
+      webhookUrl,
       [buildSummaryHeaderEmbed(campaign.name, campaign.image, payload)],
       files,
     );
