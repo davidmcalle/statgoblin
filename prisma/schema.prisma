@@ -185,17 +185,15 @@ model Actor {
   @@map("actors")
 }
 
-// Generated Discord session summaries, cached so a resend never regenerates
-// (or re-bills) the narrative. Keyed by the exact set of session dates the
-// GM picked; payload holds the narrative, awards and stat packet.
+// Generated Discord session summaries, cached so a resend reuses the same
+// payload. Keyed by the exact set of session dates the GM picked; payload
+// holds the stat totals, awards and notable rolls.
 model SessionSummary {
   id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   campaignId String   @map("campaign_id") @db.Uuid
   // Sorted session dates joined with "," — the cache key for a selection.
   datesKey   String   @map("dates_key")
   payload    Json
-  // Voice recap (mp3) — generated on demand, cached like the text.
-  audio      Bytes?
   createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
 
   @@unique([campaignId, datesKey])

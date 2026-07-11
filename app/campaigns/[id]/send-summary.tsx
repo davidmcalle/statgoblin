@@ -5,8 +5,6 @@
 import { useState, useTransition } from "react";
 import { Send } from "lucide-react";
 import {
-  generateSummaryAudio,
-  getSummaryAudio,
   previewDiscordSummary,
   sendDiscordSummary,
   type SummaryPreview,
@@ -22,8 +20,8 @@ import {
 
 const MAX_SESSIONS = 10;
 
-// GM-only: pick up to 10 sessions, preview the generated recap (narrative,
-// highlights, award cards), regenerate if it's not right, then send.
+// GM-only: pick up to 10 sessions, preview the stat summary and award cards,
+// regenerate if the data changed, then send to the campaign's webhook.
 export function SendSummary({
   campaignId,
   sessions,
@@ -39,7 +37,6 @@ export function SendSummary({
   const [open, setOpen] = useState(false);
   const [picked, setPicked] = useState<Set<string>>(new Set());
   const [preview, setPreview] = useState<SummaryPreview | null>(null);
-  const [audio, setAudio] = useState<string | null>(null);
   const [status, setStatus] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
@@ -60,20 +57,13 @@ export function SendSummary({
   const generate = (regenerate: boolean) =>
     startTransition(async () => {
       setStatus(null);
-      setAudio(null);
       const result = await previewDiscordSummary(campaignId, [...picked], regenerate);
-      if (result.ok) {
-        setPreview(result);
-        if (result.hasAudio && !regenerate) {
-          const existing = await getSummaryAudio(campaignId, [...picked]);
-          if (existing) setAudio(existing.dataUri);
-        }
-      } else setStatus(result.error);
+      if (result.ok) setPreview(result);
+      else setStatus(result.error);
     });
 
   const reset = () => {
     setPreview(null);
-    setAudio(null);
     setStatus(null);
   };
 
@@ -100,8 +90,8 @@ export function SendSummary({
             <DialogTitle>{preview ? preview.label : "Session summary"}</DialogTitle>
             <DialogDescription>
               {preview
-                ? "This is what will post to Discord. Regenerate if it's not right."
-                : `Pick the sessions to recap (up to ${MAX_SESSIONS}), then preview before anything is sent.`}
+                ? "This is what will post to Discord. Regenerate if rolls changed since."
+                : `Pick the sessions to summarize (up to ${MAX_SESSIONS}), then preview before anything is sent.`}
             </DialogDescription>
           </DialogHeader>
 
@@ -139,11 +129,7 @@ export function SendSummary({
               </ul>
               <div className="flex flex-wrap items-center gap-3">
                 <Button disabled={pending || picked.size === 0} onClick={() => generate(false)}>
-                  {pending
-                    ? "Generating…"
-                    : alreadyGenerated
-                      ? "Preview"
-                      : "Generate Preview"}
+                  {pending ? "Generating…" : alreadyGenerated ? "Preview" : "Generate Preview"}
                 </Button>
                 {status && <span className="text-sm text-muted-foreground">{status}</span>}
               </div>
@@ -166,31 +152,6 @@ export function SendSummary({
                   )}
                 </div>
 
-                {preview.dialogue.length > 0 ? (
-                  <div className="space-y-2 border-l-2 border-border pl-3 text-foreground">
-                    {preview.dialogue.map((l, i) => (
-                      <p key={i}>
-                        <span
-                          className={
-                            l.speaker === "zog"
-                              ? "font-bold text-green-700 dark:text-green-500"
-                              : "font-bold text-sky-700 dark:text-sky-400"
-                          }
-                        >
-                          {l.speaker === "zog" ? "Zog" : "Zaela"}:
-                        </span>{" "}
-                        {l.line}
-                      </p>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="text-muted-foreground">
-                    {preview.llmConfigured
-                      ? "No recap in this version — it was generated before the API key was set, or the generation failed (check server logs). Hit Regenerate."
-                      : "No recap — the app has no Anthropic API key configured, so this will post as plain stats."}
-                  </p>
-                )}
-
                 {preview.notables && preview.notables.best.length > 0 && (
                   <div>
                     <h3 className="mb-1 font-mono text-[10px] tracking-widest text-muted-foreground uppercase">
@@ -207,18 +168,16 @@ export function SendSummary({
                   </div>
                 )}
 
-                {preview.highlights.length > 0 && (
+                {preview.notables && preview.notables.worst.length > 0 && (
                   <div>
                     <h3 className="mb-1 font-mono text-[10px] tracking-widest text-muted-foreground uppercase">
-                      Highlights
+                      Low points
                     </h3>
-                    <ul className="list-inside list-disc space-y-0.5 text-muted-foreground">
-                      {preview.highlights.map((h, i) => (
+                    <ul className="space-y-0.5 text-muted-foreground">
+                      {preview.notables.worst.map((n, i) => (
                         <li key={i}>
-                          <span className="font-semibold text-foreground">
-                            {h.speaker === "zog" ? "Zog" : "Zaela"}:
-                          </span>{" "}
-                          {h.line}
+                          <span className="font-semibold text-foreground">{n.total}</span> —{" "}
+                          {n.actorName}, {n.label} (d20: {n.d20})
                         </li>
                       ))}
                     </ul>
@@ -235,32 +194,6 @@ export function SendSummary({
                         className="w-full rounded-md border border-border"
                       />
                     ))}
-                  </div>
-                )}
-
-                {preview.dialogue.length > 0 && preview.ttsConfigured && (
-                  <div className="space-y-2">
-                    <h3 className="font-mono text-[10px] tracking-widest text-muted-foreground uppercase">
-                      Voice recap
-                    </h3>
-                    {audio ? (
-                      <audio controls src={audio} className="w-full" />
-                    ) : (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        disabled={pending}
-                        onClick={() =>
-                          startTransition(async () => {
-                            const result = await generateSummaryAudio(campaignId, [...picked]);
-                            if (result.ok) setAudio(result.dataUri);
-                            else setStatus(result.error);
-                          })
-                        }
-                      >
-                        {pending ? "Voicing…" : "Generate Voice"}
-                      </Button>
-                    )}
                   </div>
                 )}
               </div>

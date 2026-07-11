@@ -20,15 +20,7 @@ import {
 } from "@/lib/discord";
 import { decryptSecret, encryptSecret, encryptionConfigured } from "@/lib/secretbox";
 import { renderAwardCards } from "@/lib/cards";
-import { generateDialogueAudio, ttsConfigured } from "@/lib/tts";
-import { datesKeyOf } from "@/lib/summary";
-import {
-  getOrCreateSummary,
-  llmConfigured,
-  recapLines,
-  type DialogueLine,
-  type SummaryPayload,
-} from "@/lib/summary";
+import { getOrCreateSummary, type SummaryPayload } from "@/lib/summary";
 import { sessions } from "@/lib/stats";
 import { sessionDayFrom } from "@/lib/session-day";
 
@@ -116,11 +108,6 @@ export async function removeDiscordWebhook(campaignId: string): Promise<void> {
   revalidatePath(`/campaigns/${campaignId}`);
 }
 
-/**
- * Creator-only: post a generated summary of the picked sessions (up to 10) to
- * the campaign's Discord webhook. First send generates awards + the Claude
- * narrative and caches the result; resends reuse the cache verbatim.
- */
 /** Resolve the picked session dates and build (or fetch) the summary. */
 async function summaryFor(
   campaignId: string,
@@ -141,7 +128,7 @@ async function summaryFor(
     .map((d) => valid.get(d)!);
   if (picked.length === 0) return { ok: false, error: "Pick at least one session" };
 
-  const { payload, cached } = await getOrCreateSummary(campaignId, campaign.name, picked, regenerate);
+  const { payload, cached } = await getOrCreateSummary(campaignId, picked, regenerate);
   const actors = await prisma.actor.findMany({
     where: { campaignId, image: { not: "" } },
     select: { name: true, image: true },
@@ -158,21 +145,16 @@ async function summaryFor(
 export type SummaryPreview = {
   ok: true;
   label: string;
-  dialogue: DialogueLine[];
-  highlights: DialogueLine[];
   totals: SummaryPayload["totals"];
   notables: SummaryPayload["notables"];
   cards: { title: string; dataUri: string }[];
   cached: boolean;
-  llmConfigured: boolean;
-  ttsConfigured: boolean;
-  hasAudio: boolean;
 };
 
 /**
  * Creator-only: generate (or fetch) the summary for the picked sessions and
- * return everything the dialog needs to show it — narrative, highlights,
- * notable rolls and the rendered award cards — without posting anything.
+ * return everything the dialog needs to show it — headline stats, notable
+ * rolls and the rendered award cards — without posting anything.
  */
 export async function previewDiscordSummary(
   campaignId: string,
@@ -184,12 +166,9 @@ export async function previewDiscordSummary(
   const { payload, images, cached } = result;
   const label = sessionLabelOf(payload.sessions);
   const cards = await renderAwardCards(payload.awards, images, label);
-  const lines = recapLines(payload);
   return {
     ok: true,
     label,
-    dialogue: lines.dialogue,
-    highlights: lines.highlights,
     totals: payload.totals,
     notables: payload.notables,
     cards: cards.map((c) => ({
@@ -197,62 +176,7 @@ export async function previewDiscordSummary(
       dataUri: `data:image/png;base64,${c.data.toString("base64")}`,
     })),
     cached,
-    llmConfigured: llmConfigured(),
-    ttsConfigured: ttsConfigured(),
-    hasAudio: await prisma.sessionSummary
-      .findUnique({
-        where: { campaignId_datesKey: { campaignId, datesKey: datesKeyOf(dates) } },
-        select: { audio: true },
-      })
-      .then((row) => !!row?.audio),
   };
-}
-
-/**
- * Creator-only: voice the cached recap dialogue via ElevenLabs and store the
- * mp3 alongside the summary. Returns the audio for in-dialog playback.
- * Costs ElevenLabs credits — only ever runs on an explicit click.
- */
-export async function generateSummaryAudio(
-  campaignId: string,
-  dates: string[],
-): Promise<{ ok: true; dataUri: string } | { ok: false; error: string }> {
-  const userId = await requireUserId();
-  await requireCreator(campaignId, userId);
-  const key = datesKeyOf([...new Set(dates)].sort());
-  const row = await prisma.sessionSummary.findUnique({
-    where: { campaignId_datesKey: { campaignId, datesKey: key } },
-  });
-  if (!row) return { ok: false, error: "Generate the summary first" };
-  const { dialogue } = recapLines(row.payload as SummaryPayload);
-  if (dialogue.length === 0) return { ok: false, error: "This summary has no dialogue to voice" };
-
-  try {
-    const audio = await generateDialogueAudio(dialogue);
-    await prisma.sessionSummary.update({
-      where: { id: row.id },
-      data: { audio: new Uint8Array(audio) },
-    });
-    return { ok: true, dataUri: `data:audio/mpeg;base64,${audio.toString("base64")}` };
-  } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : "Voice generation failed" };
-  }
-}
-
-/** Fetch the cached voice recap for in-dialog playback, if one exists. */
-export async function getSummaryAudio(
-  campaignId: string,
-  dates: string[],
-): Promise<{ dataUri: string } | null> {
-  const userId = await requireUserId();
-  await requireCreator(campaignId, userId);
-  const key = datesKeyOf([...new Set(dates)].sort());
-  const row = await prisma.sessionSummary.findUnique({
-    where: { campaignId_datesKey: { campaignId, datesKey: key } },
-    select: { audio: true },
-  });
-  if (!row?.audio) return null;
-  return { dataUri: `data:audio/mpeg;base64,${Buffer.from(row.audio).toString("base64")}` };
 }
 
 export async function sendDiscordSummary(
@@ -277,22 +201,12 @@ export async function sendDiscordSummary(
 
   const label = sessionLabelOf(payload.sessions);
   const cards = await renderAwardCards(payload.awards, images, label);
-  const files: { name: string; data: Buffer }[] = cards.map(({ name, data }) => ({ name, data }));
-
-  // Voice recap rides along when it's been generated.
-  const audioRow = await prisma.sessionSummary.findUnique({
-    where: {
-      campaignId_datesKey: { campaignId, datesKey: datesKeyOf(payload.sessions.map((s) => s.date)) },
-    },
-    select: { audio: true },
-  });
-  if (audioRow?.audio) files.push({ name: "recap.mp3", data: Buffer.from(audioRow.audio) });
 
   try {
     await postWebhook(
       webhookUrl,
       [buildSummaryHeaderEmbed(campaign.name, campaign.image, payload)],
-      files,
+      cards.map(({ name, data }) => ({ name, data })),
     );
   } catch (e) {
     return { sent: false, error: e instanceof Error ? e.message : "Failed to reach Discord" };

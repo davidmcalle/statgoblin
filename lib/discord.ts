@@ -1,4 +1,4 @@
-import { recapLines, SPEAKER_NAMES, type SummaryPayload } from "@/lib/summary";
+import type { SummaryPayload } from "@/lib/summary";
 
 // Discord webhook plumbing for "Send summary". Plain fetch against the
 // campaign's webhook URL — no bot, no OAuth; the GM mints the webhook in
@@ -43,8 +43,7 @@ export async function postWebhook(
     const form = new FormData();
     form.append("payload_json", JSON.stringify({ username: "StatGoblin", embeds }));
     files.forEach((f, i) => {
-      const type = f.name.endsWith(".mp3") ? "audio/mpeg" : "image/png";
-      form.append(`files[${i}]`, new Blob([new Uint8Array(f.data)], { type }), f.name);
+      form.append(`files[${i}]`, new Blob([new Uint8Array(f.data)], { type: "image/png" }), f.name);
     });
     res = await fetch(webhookUrl, { method: "POST", body: form });
   }
@@ -67,9 +66,9 @@ export function sessionLabelOf(sessions: { n: number; date: string }[]): string 
 }
 
 /**
- * The header embed: campaign image, session label, narrative, headline stats,
- * highlights and the session's notable rolls. Award cards travel separately
- * as image attachments (text composed onto the art).
+ * The header embed: campaign image, session label, headline stats and the
+ * session's notable rolls. Award cards travel separately as image
+ * attachments (text composed onto the art).
  */
 export function buildSummaryHeaderEmbed(
   campaignName: string,
@@ -77,7 +76,6 @@ export function buildSummaryHeaderEmbed(
   payload: SummaryPayload,
 ): object {
   const { sessions, totals, notables } = payload;
-  const { dialogue, highlights } = recapLines(payload);
 
   const headline = [
     `🎲 **${totals.totalRolls}** rolls`,
@@ -88,13 +86,9 @@ export function buildSummaryHeaderEmbed(
     .filter(Boolean)
     .join(" · ");
 
-  const banter = dialogue
-    .map((l) => `**${SPEAKER_NAMES[l.speaker]}:** ${l.line}`)
-    .join("\n\n");
-
   const header: Record<string, unknown> = {
     title: `${campaignName} — ${sessionLabelOf(sessions)}`,
-    description: [banter, headline].filter(Boolean).join("\n\n").slice(0, 4000),
+    description: headline,
     color: EMBED_COLOR,
     footer: { text: "StatGoblin" },
   };
@@ -110,11 +104,11 @@ export function buildSummaryHeaderEmbed(
     }
     fields.push({ name: "Top rolls", value: lines.join("\n").slice(0, 1024) });
   }
-  if (highlights.length) {
+  if (notables?.worst.length) {
     fields.push({
-      name: "Highlights",
-      value: highlights
-        .map((h) => `• **${SPEAKER_NAMES[h.speaker]}:** ${h.line}`)
+      name: "Low points",
+      value: notables.worst
+        .map((n) => `**${n.total}** — ${n.actorName}, ${n.label} (d20: ${n.d20})`)
         .join("\n")
         .slice(0, 1024),
     });
