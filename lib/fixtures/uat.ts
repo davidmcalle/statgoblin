@@ -1,5 +1,6 @@
 import { SKILL_ABILITY } from "@/lib/dnd5e-meta";
 import { sessionDayFrom, sessionDayOf } from "@/lib/session-day";
+import { analyzeGroupRolls, type GroupRollReport } from "@/lib/group-rolls";
 import type { ActorKind } from "@/lib/kind";
 import type {
   ActorStats,
@@ -22,7 +23,11 @@ import type {
 // the database — /dev/uat renders the real components against this instead,
 // so layout work can be verified without live rolls.
 
-export type FixtureRoll = RollLogRow & { messageId: string; kind: ActorKind };
+export type FixtureRoll = RollLogRow & {
+  messageId: string;
+  kind: ActorKind;
+  advantageState: number | null;
+};
 
 export type FixtureActor = {
   actorId: string;
@@ -182,6 +187,7 @@ function buildRolls(): FixtureRoll[] {
       isNat20: false,
       isNat1: false,
       isHidden: false,
+      advantageState: null,
       messageId,
       kind: actor.kind,
       ...rest,
@@ -341,6 +347,48 @@ function buildRolls(): FixtureRoll[] {
     }
   }
 
+  // Deterministic group-roll bursts in the final session, so the group-rolls
+  // panel always has data: the party rolling the same check within seconds.
+  const pcs = UAT_ACTORS.filter((a) => a.kind === "pc");
+  const lastDate = SESSION_DATES[SESSION_DATES.length - 1];
+  const burst = (
+    skill: string,
+    h: number,
+    m: number,
+    entries: { actor: FixtureActor; face: number; mod: number; adv?: number; offset: number }[],
+  ) => {
+    for (const e of entries) {
+      const when = new Date(`${lastDate}T${pad(h)}:${pad(m)}:00Z`);
+      when.setUTCSeconds(when.getUTCSeconds() + e.offset);
+      push({
+        rollType: "skill",
+        actor: e.actor,
+        when,
+        skill,
+        ability: SKILL_ABILITY[skill],
+        dice: [{ f: 20, r: e.face }],
+        modifier: e.mod,
+        total: e.face + e.mod,
+        isNat20: e.face === 20,
+        isNat1: e.face === 1,
+        advantageState: e.adv ?? 0,
+      });
+    }
+  };
+  // Party insight sweep: a nat 20 and a nat 1 in the same burst.
+  burst("ins", 20, 0, [
+    { actor: pcs[0], face: 20, mod: 2, offset: 0 },
+    { actor: pcs[1], face: 1, mod: 1, offset: 15 },
+    { actor: pcs[2], face: 11, mod: 0, offset: 32 },
+    { actor: pcs[3], face: 19, mod: 4, offset: 48 },
+  ]);
+  // Group stealth escape: two nat 20s (double nat 20), mixed advantage.
+  burst("ste", 20, 5, [
+    { actor: pcs[0], face: 20, mod: 6, adv: 1, offset: 0 },
+    { actor: pcs[1], face: 15, mod: 2, offset: 22 },
+    { actor: pcs[2], face: 20, mod: -2, adv: -1, offset: 41 },
+  ]);
+
   return rolls.sort((a, b) => a.rolledAt.getTime() - b.rolledAt.getTime());
 }
 
@@ -349,6 +397,27 @@ function pad(n: number): string {
 }
 
 export const UAT_ROLLS: FixtureRoll[] = buildRolls();
+
+/** Group-roll report over the fixture PCs — mirrors stats.groupRollsFor. */
+export function uatGroupRolls(rolls: FixtureRoll[] = UAT_ROLLS): GroupRollReport {
+  const rows = rolls
+    .filter((r) => r.kind === "pc")
+    .map((r) => ({
+      rolledAt: r.rolledAt,
+      actorFid: r.actorFid,
+      actorName: r.actorName,
+      rollType: r.rollType,
+      skill: r.skill,
+      ability: r.ability,
+      d20: r.dice.find((x) => x.f === 20)?.r ?? null,
+      total: r.total,
+      advantageState: r.advantageState,
+      isNat20: r.isNat20,
+      isNat1: r.isNat1,
+      sessionDate: r.sessionDate,
+    }));
+  return analyzeGroupRolls(rows);
+}
 
 // ---------------------------------------------------------------------------
 // In-memory aggregates, mirroring lib/stats.ts shapes.

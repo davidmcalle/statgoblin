@@ -8,6 +8,7 @@ import {
   uatDeathSaves,
   uatFilter,
   uatFilterOptions,
+  uatGroupRolls,
   uatHistogram,
   uatItemUsage,
   uatRollLog,
@@ -35,6 +36,7 @@ import {
   D20HistogramCard,
   D20HeatmapCard,
   DicePactsCard,
+  GroupRollsCard,
   RadarCard,
   RollTypesCard,
   SkillBarsCard,
@@ -92,6 +94,7 @@ export default async function UatPage({
   const deathSaves = uatDeathSaves(rolls);
   const totals = uatTotals(rolls);
   const skillBuckets = uatSkillBuckets(rolls);
+  const groupReport = uatGroupRolls();
   const skillMatrix = uatSkillMatrix(rolls, by);
   const checkMatrix = uatAbilityMatrix(rolls, by, ["ability"]);
   const saveMatrix = uatAbilityMatrix(rolls, by, ["save", "concentration"]);
@@ -294,6 +297,10 @@ export default async function UatPage({
               <D20HeatmapCard rows={d20HeatRows} subjectLabel={subjectWord} />
               <DicePactsCard rows={pactRows} />
             </div>
+          </Section>
+
+          <Section title="Group rolls" description="When the party rolls together">
+            <GroupRollsCard report={groupReport} subjectLabel={subjectWord} />
           </Section>
 
           <Section

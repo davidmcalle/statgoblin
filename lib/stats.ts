@@ -3,6 +3,7 @@ import { prisma } from "@/lib/db/prisma";
 import { effectiveKind } from "@/lib/kind";
 import { SKILL_ABILITY } from "@/lib/dnd5e-meta";
 import { sessionDayFrom } from "@/lib/session-day";
+import { analyzeGroupRolls, GROUP_CHECK_TYPES, type GroupRollReport } from "@/lib/group-rolls";
 
 // Dashboard aggregates over the derived rolls table, all filterable by
 // character, roll type, and recency. Raw SQL where Prisma's groupBy can't
@@ -584,6 +585,40 @@ export async function rollLog(
     ...r,
     dice: Array.isArray(r.dice) ? (r.dice as { f: number; r: number }[]) : [],
   }));
+}
+
+/**
+ * Group rolls — bursts of the same check by ≥2 subjects within the window.
+ * Callers pass PC actor fids via `f.actorFids` to limit to party rolls; other
+ * filters (session/day/recency) narrow the pool as usual.
+ */
+export async function groupRollsFor(
+  campaignId: string,
+  f: StatFilters = {},
+): Promise<GroupRollReport> {
+  const rows = await prisma.roll.findMany({
+    where: {
+      ...whereFilters(campaignId, f),
+      rollType: { in: [...GROUP_CHECK_TYPES] },
+      d20: { not: null },
+    },
+    select: {
+      rolledAt: true,
+      actorFid: true,
+      actorName: true,
+      rollType: true,
+      skill: true,
+      ability: true,
+      d20: true,
+      total: true,
+      advantageState: true,
+      isNat20: true,
+      isNat1: true,
+      sessionDate: true,
+    },
+    orderBy: { rolledAt: "asc" },
+  });
+  return analyzeGroupRolls(rows);
 }
 
 /** Distinct values for the filter bar — always unfiltered. */

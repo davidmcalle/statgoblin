@@ -15,7 +15,7 @@ import {
   skillAbilityBuckets,
   type StatFilters,
 } from "@/lib/stats";
-import { actorFidsForKind, rollLog, sessions } from "@/lib/stats";
+import { actorFidsForKind, groupRollsFor, rollLog, sessions } from "@/lib/stats";
 import { BubblePackCard } from "./bubble-card";
 import { RollLog } from "./roll-log";
 import { ViewToggle } from "./view-toggle";
@@ -43,6 +43,7 @@ import {
   D20HistogramCard,
   D20HeatmapCard,
   DicePactsCard,
+  GroupRollsCard,
   RadarCard,
   RollTypesCard,
   SkillBarsCard,
@@ -102,6 +103,16 @@ export default async function CampaignPage({
     includeHidden: isCreator,
   };
 
+  // Group rolls are inherently party-wide, so they ignore the actor/kind
+  // slicer and always run over PCs — but still honour session/recency.
+  const pcFids = await actorFidsForKind(id, "pc");
+  const groupFilter: StatFilters = {
+    session: filters.session,
+    days: filters.days,
+    includeHidden: filters.includeHidden,
+    actorFids: pcFids,
+  };
+
   const [
     stats,
     histogram,
@@ -117,6 +128,7 @@ export default async function CampaignPage({
     tops,
     actors,
     members,
+    groupReport,
   ] = await Promise.all([
     actorStats(id, filters, by),
     d20Histogram(id, filters, by),
@@ -132,6 +144,7 @@ export default async function CampaignPage({
     actorTops(id, filters, by),
     prisma.actor.findMany({ where: { campaignId: id } }),
     campaignMembers(id),
+    groupRollsFor(id, groupFilter),
   ]);
   const sessionList = await sessions(id);
   const logRows = view === "log" ? await rollLog(id, filters) : [];
@@ -397,6 +410,10 @@ export default async function CampaignPage({
           <D20HeatmapCard rows={d20HeatRows} subjectLabel={subjectWord} />
           <DicePactsCard rows={pactRows} />
         </div>
+      </Section>
+
+      <Section title="Group rolls" description="When the party rolls together">
+        <GroupRollsCard report={groupReport} subjectLabel={subjectWord} />
       </Section>
 
       <Section

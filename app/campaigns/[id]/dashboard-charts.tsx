@@ -21,6 +21,8 @@ import {
   type ChartConfig,
 } from "@/components/ui/chart";
 import { useIsMobile } from "@/lib/use-mobile";
+import { ABILITY_NAMES, SKILL_NAMES } from "@/lib/dnd5e-meta";
+import type { GroupRoll, GroupRollReport } from "@/lib/group-rolls";
 
 // All recharts panels, shadcn-wrapped. Data arrives shaped + colored from the
 // server page; components stay purely presentational.
@@ -392,6 +394,190 @@ export function D20HeatmapCard({
             </tbody>
           </table>
         </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+const TYPE_WORD: Record<string, string> = {
+  skill: "check",
+  ability: "check",
+  save: "save",
+  concentration: "concentration",
+};
+
+function groupLabel(g: GroupRoll): string {
+  const base = g.skill
+    ? (SKILL_NAMES[g.skill] ?? g.skill)
+    : g.ability
+      ? (ABILITY_NAMES[g.ability] ?? g.ability)
+      : "Check";
+  return `${base} ${TYPE_WORD[g.rollType] ?? "check"}`;
+}
+
+function AdvMark({ state }: { state: number | null }) {
+  if (state === 1)
+    return (
+      <span className="text-green-600 dark:text-green-500" title="Advantage">
+        ▲
+      </span>
+    );
+  if (state === -1)
+    return (
+      <span className="text-red-600 dark:text-red-400" title="Disadvantage">
+        ▼
+      </span>
+    );
+  return null;
+}
+
+const MAX_GROUPS = 20;
+
+// Group rolls: the party rolling the same check in a burst. Shows a campaign
+// advantage/disadvantage strip up top, then each burst with every
+// participant's d20, the group average, and double-nat callouts.
+export function GroupRollsCard({
+  report,
+  subjectLabel = "player",
+}: {
+  report: GroupRollReport;
+  subjectLabel?: string;
+}) {
+  const { summary, groups } = report;
+  const totalChecks = summary.adv.n + summary.normal.n + summary.dis.n;
+  if (totalChecks === 0) return null;
+  const shown = groups.slice(0, MAX_GROUPS);
+  const advTiles = [
+    { label: "Advantage", b: summary.adv, mark: "▲", cls: "text-green-600 dark:text-green-500" },
+    { label: "Normal", b: summary.normal, mark: "", cls: "" },
+    {
+      label: "Disadvantage",
+      b: summary.dis,
+      mark: "▼",
+      cls: "text-red-600 dark:text-red-400",
+    },
+  ] as const;
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Group rolls</CardTitle>
+        <CardDescription>
+          When the party makes the same check together (within 90s) · plus how advantage and
+          disadvantage played out
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="grid grid-cols-3 gap-2">
+          {advTiles.map((t) => (
+            <div key={t.label} className="rounded-md border border-border p-3 text-center">
+              <div className="text-lg font-bold tabular-nums">{t.b.avgD20 ?? "—"}</div>
+              <div className="text-[11px] text-muted-foreground">
+                <span className={t.cls}>{t.mark}</span> {t.label} avg d20
+              </div>
+              <div className="text-[11px] text-muted-foreground">
+                {t.b.n} roll{t.b.n === 1 ? "" : "s"}
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {(report.doubleNat20Groups > 0 || report.doubleNat1Groups > 0) && (
+          <div className="flex flex-wrap gap-4 text-xs">
+            {report.doubleNat20Groups > 0 && (
+              <span className="text-green-600 dark:text-green-500">
+                🍀 {report.doubleNat20Groups} group{report.doubleNat20Groups === 1 ? "" : "s"} with
+                double nat 20
+              </span>
+            )}
+            {report.doubleNat1Groups > 0 && (
+              <span className="text-red-600 dark:text-red-400">
+                💀 {report.doubleNat1Groups} group{report.doubleNat1Groups === 1 ? "" : "s"} with
+                double nat 1
+              </span>
+            )}
+          </div>
+        )}
+
+        {shown.length === 0 ? (
+          <p className="text-sm text-muted-foreground">
+            No group rolls yet — they appear when {subjectLabel}s roll the same check within 90
+            seconds of each other.
+          </p>
+        ) : (
+          <ul className="space-y-2">
+            {shown.map((g, i) => (
+              <li key={i} className="rounded-md border border-border p-3">
+                <div className="mb-2 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+                  <div className="flex items-center gap-2">
+                    <span className="font-semibold">{groupLabel(g)}</span>
+                    {g.doubleNat20 && (
+                      <span className="text-xs text-green-600 dark:text-green-500">
+                        double nat 20
+                      </span>
+                    )}
+                    {g.doubleNat1 && (
+                      <span className="text-xs text-red-600 dark:text-red-400">double nat 1</span>
+                    )}
+                  </div>
+                  <div className="text-xs text-muted-foreground">
+                    {new Date(g.sessionDate).toLocaleDateString("en-GB", {
+                      day: "numeric",
+                      month: "short",
+                      timeZone: "UTC",
+                    })}{" "}
+                    · {g.participants.length} {subjectLabel}s
+                    {g.spanSec > 0 ? ` · within ${g.spanSec}s` : ""}
+                  </div>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {g.participants.map((p, j) => (
+                    <span
+                      key={j}
+                      className="inline-flex items-center gap-1.5 rounded-md bg-muted px-2 py-1 text-xs"
+                    >
+                      <span className="text-muted-foreground">{p.actorName}</span>
+                      <AdvMark state={p.advantageState} />
+                      <span
+                        className={`font-bold tabular-nums ${
+                          p.isNat20
+                            ? "text-green-600 dark:text-green-500"
+                            : p.isNat1
+                              ? "text-red-600 dark:text-red-400"
+                              : ""
+                        }`}
+                      >
+                        {p.d20 ?? "—"}
+                      </span>
+                      {p.total != null && <span className="text-muted-foreground">→ {p.total}</span>}
+                    </span>
+                  ))}
+                </div>
+                <div className="mt-2 text-xs text-muted-foreground">
+                  Group result: avg total{" "}
+                  <span className="font-semibold text-foreground tabular-nums">
+                    {g.avgTotal ?? "—"}
+                  </span>{" "}
+                  · avg d20{" "}
+                  <span className="font-semibold text-foreground tabular-nums">
+                    {g.avgD20 ?? "—"}
+                  </span>
+                  {g.advCount > 0 || g.disCount > 0 ? (
+                    <span>
+                      {" "}
+                      · {g.advCount} adv / {g.disCount} dis
+                    </span>
+                  ) : null}
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+
+        {groups.length > MAX_GROUPS && (
+          <p className="text-xs text-muted-foreground">
+            Showing the {MAX_GROUPS} most recent of {groups.length} group rolls.
+          </p>
+        )}
       </CardContent>
     </Card>
   );
