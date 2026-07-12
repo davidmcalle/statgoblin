@@ -267,13 +267,17 @@ export async function skillAbilityBuckets(
   >`
     SELECT COALESCE(skill, ability)  AS key,
            skill IS NOT NULL         AS is_skill,
-           ability,
+           MAX(ability)              AS ability,
            COUNT(*)                  AS count
     FROM rolls
     WHERE ${sqlFilters(campaignId, f)}
       AND d20 IS NOT NULL
       AND COALESCE(skill, ability) IS NOT NULL
-    GROUP BY 1, 2, 3
+    -- Group by skill/ability identity only. Grouping on the raw ability column
+    -- too would split one skill into two buckets when rolls disagree on the
+    -- enriched ability (e.g. History with ability="int" vs null). MAX keeps a
+    -- representative ability; for known skills SKILL_ABILITY[key] overrides it.
+    GROUP BY 1, 2
     ORDER BY count DESC`;
   return rows.map((r) => ({
     key: r.key,
