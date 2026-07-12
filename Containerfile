@@ -5,7 +5,13 @@
 FROM docker.io/library/node:24-slim AS deps
 WORKDIR /app
 COPY package.json package-lock.json ./
-RUN npm ci --no-audit --no-fund
+# npm ci can skip a package's platform-specific optional binaries when the
+# lockfile was generated on another OS (e.g. macOS) — sharp then fails at
+# runtime with "Could not load the sharp module using the linux-x64 runtime".
+# Reinstall sharp so its optional binary for THIS build platform is fetched
+# (build arch == runtime arch here); --no-save leaves the lockfile untouched.
+RUN npm ci --no-audit --no-fund \
+ && npm install --no-save --no-audit --no-fund --include=optional sharp
 
 FROM docker.io/library/node:24-slim AS builder
 WORKDIR /app
