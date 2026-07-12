@@ -340,14 +340,20 @@ export function D20HeatmapCard({
       </CardHeader>
       <CardContent>
         <div className="overflow-x-auto">
-          <table className="border-separate" style={{ borderSpacing: 2 }}>
+          <table
+            className="w-full min-w-[560px] table-fixed border-separate"
+            style={{ borderSpacing: 2 }}
+          >
+            <colgroup>
+              <col style={{ width: 132 }} />
+            </colgroup>
             <thead>
               <tr>
                 <th className="sticky left-0 bg-card" />
                 {faces.map((f) => (
                   <th
                     key={f}
-                    className="w-6 text-center text-[10px] font-medium tabular-nums"
+                    className="text-center text-[10px] font-medium tabular-nums"
                     style={{
                       color:
                         f === 20
@@ -365,14 +371,17 @@ export function D20HeatmapCard({
             <tbody>
               {rows.map((r) => (
                 <tr key={r.name}>
-                  <td className="sticky left-0 bg-card pr-2 text-right text-xs whitespace-nowrap">
+                  <td
+                    className="sticky left-0 max-w-0 truncate bg-card pr-2 text-right text-xs whitespace-nowrap"
+                    title={r.name}
+                  >
                     {r.name}
                   </td>
                   {r.counts.map((c, i) => (
                     <td
                       key={i}
                       title={`${r.name} rolled ${i + 1} — ${c} time${c === 1 ? "" : "s"}`}
-                      className="h-6 w-6 rounded-[3px] text-center text-[10px] tabular-nums text-foreground/80"
+                      className="h-8 rounded-[3px] text-center text-[11px] tabular-nums text-foreground/80"
                       style={{ background: cellFor(c) }}
                     >
                       {c || ""}
