@@ -5,6 +5,8 @@ import {
   BarChart,
   CartesianGrid,
   Cell,
+  Line,
+  LineChart,
   PolarAngleAxis,
   PolarGrid,
   Radar,
@@ -292,6 +294,79 @@ export function RadarCard({
               />
             ))}
           </RadarChart>
+        </ChartContainer>
+        <div className="mt-2 flex flex-wrap justify-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
+          {series.map((s) => (
+            <span key={s.name} className="flex items-center gap-1.5">
+              <span className="h-2.5 w-2.5 rounded-full" style={{ background: s.color }} />
+              {s.name}
+            </span>
+          ))}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+// A row per d20 face (1-20) with one numeric key per subject — the whole
+// distribution overlaid, one line each.
+export type LineRow = Record<string, number>;
+
+export function D20LinesCard({
+  data,
+  series,
+  subjectLabel,
+}: {
+  data: LineRow[];
+  series: { name: string; color: string }[];
+  subjectLabel: string;
+}) {
+  const isMobile = useIsMobile();
+  if (series.length === 0) return null;
+  const total = data.reduce(
+    (n, row) => n + series.reduce((m, s) => m + (Number(row[s.name]) || 0), 0),
+    0,
+  );
+  if (total === 0) return null;
+  const config = Object.fromEntries(
+    series.map((s) => [s.name, { label: s.name, color: s.color }]),
+  ) satisfies ChartConfig;
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>d20 faces by {subjectLabel}</CardTitle>
+        <CardDescription>
+          How often each face (1-20) came up · one line per {subjectLabel}
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <ChartContainer config={config} className="h-64 w-full">
+          <LineChart data={data} margin={{ left: -20, right: 8 }}>
+            <CartesianGrid vertical={false} strokeOpacity={0.25} />
+            <XAxis
+              dataKey="face"
+              tickLine={false}
+              axisLine={false}
+              interval={isMobile ? 1 : 0}
+              fontSize={11}
+            />
+            <YAxis allowDecimals={false} tickLine={false} axisLine={false} />
+            <ChartTooltip content={<ChartTooltipContent />} />
+            {series.map((s) => (
+              <Line
+                key={s.name}
+                type="monotone"
+                dataKey={s.name}
+                name={s.name}
+                stroke={s.color}
+                strokeWidth={2}
+                dot={false}
+                activeDot={{ r: 3 }}
+                isAnimationActive={false}
+                connectNulls
+              />
+            ))}
+          </LineChart>
         </ChartContainer>
         <div className="mt-2 flex flex-wrap justify-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
           {series.map((s) => (

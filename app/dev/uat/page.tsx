@@ -33,10 +33,12 @@ import {
 } from "@/app/campaigns/[id]/panels";
 import {
   D20HistogramCard,
+  D20LinesCard,
   DicePactsCard,
   RadarCard,
   RollTypesCard,
   SkillBarsCard,
+  type LineRow,
   type NamedCount,
   type RadarRow,
 } from "@/app/campaigns/[id]/dashboard-charts";
@@ -155,6 +157,19 @@ export default async function UatPage({
       nat20: +((s.nat20s / s.d20Rolls) * 100).toFixed(2),
       nat1: +((s.nat1s / s.d20Rolls) * 100).toFixed(2),
     }));
+
+  const d20LineSeries = stats
+    .filter((s) => s.d20Rolls > 0)
+    .sort((a, b) => b.d20Rolls - a.d20Rolls)
+    .slice(0, 10)
+    .map((s) => ({ name: s.actorName, color: colors.get(s.actorName) ?? FALLBACK }));
+  const d20LineData: LineRow[] = histogram.map((b) => {
+    const counts = new Map(b.byName.map((n) => [n.name, n.count]));
+    return {
+      face: b.face,
+      ...Object.fromEntries(d20LineSeries.map((s) => [s.name, counts.get(s.name) ?? 0])),
+    };
+  });
 
   const radarSeries = skillMatrix.actors.map((a) => ({
     name: a.name,
@@ -281,6 +296,7 @@ export default async function UatPage({
           <Section title="Dice fairness" description="Is the randomness actually random?">
             <div className="grid gap-4">
               <D20HistogramCard data={histogram} />
+              <D20LinesCard data={d20LineData} series={d20LineSeries} subjectLabel={subjectWord} />
               <DicePactsCard rows={pactRows} />
             </div>
           </Section>
