@@ -41,12 +41,12 @@ import { FilterBar } from "./filter-bar";
 import { CharacterTable, DeathSavesCard, ItemsCard, Section, StatCards } from "./panels";
 import {
   D20HistogramCard,
-  D20LinesCard,
+  D20HeatmapCard,
   DicePactsCard,
   RadarCard,
   RollTypesCard,
   SkillBarsCard,
-  type LineRow,
+  type HeatRow,
   type NamedCount,
   type RadarRow,
 } from "./dashboard-charts";
@@ -234,20 +234,15 @@ export default async function CampaignPage({
   const checkRadar = abilityRadar(checkMatrix);
   const saveRadar = abilityRadar(saveMatrix);
 
-  // d20-face lines: one per subject, capped to the ten busiest d20 rollers so
-  // the overlay stays readable. Each face row is zero-filled per subject.
-  const d20LineSeries = stats
+  // d20-face heatmap rows: every subject that rolled a d20, busiest first;
+  // counts[i] is how many times they landed face i+1.
+  const d20HeatRows: HeatRow[] = stats
     .filter((s) => s.d20Rolls > 0)
     .sort((a, b) => b.d20Rolls - a.d20Rolls)
-    .slice(0, 10)
-    .map((s) => ({ name: s.actorName, color: colors.get(s.actorName) ?? FALLBACK }));
-  const d20LineData: LineRow[] = histogram.map((b) => {
-    const counts = new Map(b.byName.map((n) => [n.name, n.count]));
-    return {
-      face: b.face,
-      ...Object.fromEntries(d20LineSeries.map((s) => [s.name, counts.get(s.name) ?? 0])),
-    };
-  });
+    .map((s) => ({
+      name: s.actorName,
+      counts: histogram.map((b) => b.byName.find((n) => n.name === s.actorName)?.count ?? 0),
+    }));
 
   // Bubble packs — same filtered dataset, so slicers cascade PowerBI-style.
   const skillBubbles = skillBars.map((b) => ({ name: b.name, value: b.count, color: b.fill }));
@@ -399,7 +394,7 @@ export default async function CampaignPage({
       <Section title="Dice fairness" description="Is the randomness actually random?">
         <div className="grid gap-4">
           <D20HistogramCard data={histogram} />
-          <D20LinesCard data={d20LineData} series={d20LineSeries} subjectLabel={subjectWord} />
+          <D20HeatmapCard rows={d20HeatRows} subjectLabel={subjectWord} />
           <DicePactsCard rows={pactRows} />
         </div>
       </Section>

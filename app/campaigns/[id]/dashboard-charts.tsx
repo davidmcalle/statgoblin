@@ -5,8 +5,6 @@ import {
   BarChart,
   CartesianGrid,
   Cell,
-  Line,
-  LineChart,
   PolarAngleAxis,
   PolarGrid,
   Radar,
@@ -308,73 +306,82 @@ export function RadarCard({
   );
 }
 
-// A row per d20 face (1-20) with one numeric key per subject — the whole
-// distribution overlaid, one line each.
-export type LineRow = Record<string, number>;
+// One row per subject; counts[i] = times they rolled face i+1 (length 20).
+export type HeatRow = { name: string; counts: number[] };
 
-export function D20LinesCard({
-  data,
-  series,
+// d20 faces as a heatmap: rows are subjects, columns faces 1-20, cell darkness
+// (one sequential hue) = how often that subject rolled that face, with the
+// count printed in the cell. Discrete and non-overlapping — unlike a line
+// chart it never interpolates counts that don't exist, and it scales to any
+// number of rollers without a colour running out.
+export function D20HeatmapCard({
+  rows,
   subjectLabel,
 }: {
-  data: LineRow[];
-  series: { name: string; color: string }[];
+  rows: HeatRow[];
   subjectLabel: string;
 }) {
-  const isMobile = useIsMobile();
-  if (series.length === 0) return null;
-  const total = data.reduce(
-    (n, row) => n + series.reduce((m, s) => m + (Number(row[s.name]) || 0), 0),
-    0,
-  );
-  if (total === 0) return null;
-  const config = Object.fromEntries(
-    series.map((s) => [s.name, { label: s.name, color: s.color }]),
-  ) satisfies ChartConfig;
+  const max = Math.max(1, ...rows.flatMap((r) => r.counts));
+  const total = rows.reduce((n, r) => n + r.counts.reduce((a, b) => a + b, 0), 0);
+  if (rows.length === 0 || total === 0) return null;
+  const faces = Array.from({ length: 20 }, (_, i) => i + 1);
+  const cellFor = (count: number) => {
+    if (count === 0) return "var(--muted)";
+    const pct = Math.round((0.18 + 0.82 * (count / max)) * 100);
+    return `color-mix(in oklab, var(--series-1) ${pct}%, transparent)`;
+  };
   return (
     <Card>
       <CardHeader>
         <CardTitle>d20 faces by {subjectLabel}</CardTitle>
         <CardDescription>
-          How often each face (1-20) came up · one line per {subjectLabel}
+          How often each {subjectLabel} rolled each face (1-20) · darker = more often
         </CardDescription>
       </CardHeader>
       <CardContent>
-        <ChartContainer config={config} className="h-64 w-full">
-          <LineChart data={data} margin={{ left: -20, right: 8 }}>
-            <CartesianGrid vertical={false} strokeOpacity={0.25} />
-            <XAxis
-              dataKey="face"
-              tickLine={false}
-              axisLine={false}
-              interval={isMobile ? 1 : 0}
-              fontSize={11}
-            />
-            <YAxis allowDecimals={false} tickLine={false} axisLine={false} />
-            <ChartTooltip content={<ChartTooltipContent />} />
-            {series.map((s) => (
-              <Line
-                key={s.name}
-                type="monotone"
-                dataKey={s.name}
-                name={s.name}
-                stroke={s.color}
-                strokeWidth={2}
-                dot={false}
-                activeDot={{ r: 3 }}
-                isAnimationActive={false}
-                connectNulls
-              />
-            ))}
-          </LineChart>
-        </ChartContainer>
-        <div className="mt-2 flex flex-wrap justify-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
-          {series.map((s) => (
-            <span key={s.name} className="flex items-center gap-1.5">
-              <span className="h-2.5 w-2.5 rounded-full" style={{ background: s.color }} />
-              {s.name}
-            </span>
-          ))}
+        <div className="overflow-x-auto">
+          <table className="border-separate" style={{ borderSpacing: 2 }}>
+            <thead>
+              <tr>
+                <th className="sticky left-0 bg-card" />
+                {faces.map((f) => (
+                  <th
+                    key={f}
+                    className="w-6 text-center text-[10px] font-medium tabular-nums"
+                    style={{
+                      color:
+                        f === 20
+                          ? "#22c55e"
+                          : f === 1
+                            ? "#ef4444"
+                            : "var(--muted-foreground)",
+                    }}
+                  >
+                    {f}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((r) => (
+                <tr key={r.name}>
+                  <td className="sticky left-0 bg-card pr-2 text-right text-xs whitespace-nowrap">
+                    {r.name}
+                  </td>
+                  {r.counts.map((c, i) => (
+                    <td
+                      key={i}
+                      title={`${r.name} rolled ${i + 1} — ${c} time${c === 1 ? "" : "s"}`}
+                      className="h-6 w-6 rounded-[3px] text-center text-[10px] tabular-nums text-foreground/80"
+                      style={{ background: cellFor(c) }}
+                    >
+                      {c || ""}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       </CardContent>
     </Card>
