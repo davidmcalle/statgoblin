@@ -161,57 +161,66 @@ export async function previewDiscordSummary(
   dates: string[],
   regenerate = false,
 ): Promise<SummaryPreview | { ok: false; error: string }> {
-  const result = await summaryFor(campaignId, dates, regenerate);
-  if (!result.ok) return result;
-  const { payload, images, cached } = result;
-  const label = sessionLabelOf(payload.sessions);
-  const cards = await renderAwardCards(payload.awards, images, label);
-  return {
-    ok: true,
-    label,
-    totals: payload.totals,
-    notables: payload.notables,
-    cards: cards.map((c) => ({
-      title: c.title,
-      dataUri: `data:image/png;base64,${c.data.toString("base64")}`,
-    })),
-    cached,
-  };
+  try {
+    const result = await summaryFor(campaignId, dates, regenerate);
+    if (!result.ok) return result;
+    const { payload, images, cached } = result;
+    const label = sessionLabelOf(payload.sessions);
+    const cards = await renderAwardCards(payload.awards, images, label);
+    return {
+      ok: true,
+      label,
+      totals: payload.totals,
+      notables: payload.notables,
+      cards: cards.map((c) => ({
+        title: c.title,
+        dataUri: `data:image/png;base64,${c.data.toString("base64")}`,
+      })),
+      cached,
+    };
+  } catch (e) {
+    // Never let a summary/render throw take down the whole page — surface it in
+    // the dialog, and log the stack so the server logs show the real cause.
+    console.error("previewDiscordSummary failed", e);
+    return { ok: false, error: e instanceof Error ? e.message : "Couldn't build the preview" };
+  }
 }
 
 export async function sendDiscordSummary(
   campaignId: string,
   dates: string[],
 ): Promise<{ sent: boolean; error?: string }> {
-  const result = await summaryFor(campaignId, dates, false);
-  if (!result.ok) return { sent: false, error: result.error };
-  const { campaign, payload, images } = result;
-  if (!campaign.discordWebhookUrl) {
-    return { sent: false, error: "Set a Discord webhook URL in campaign settings first" };
-  }
-  let webhookUrl: string;
   try {
-    webhookUrl = decryptSecret(campaign.discordWebhookUrl);
-  } catch {
-    return {
-      sent: false,
-      error: "Stored webhook can't be decrypted (ENCRYPTION_KEY changed?) — re-add it in settings",
-    };
-  }
+    const result = await summaryFor(campaignId, dates, false);
+    if (!result.ok) return { sent: false, error: result.error };
+    const { campaign, payload, images } = result;
+    if (!campaign.discordWebhookUrl) {
+      return { sent: false, error: "Set a Discord webhook URL in campaign settings first" };
+    }
+    let webhookUrl: string;
+    try {
+      webhookUrl = decryptSecret(campaign.discordWebhookUrl);
+    } catch {
+      return {
+        sent: false,
+        error:
+          "Stored webhook can't be decrypted (ENCRYPTION_KEY changed?) — re-add it in settings",
+      };
+    }
 
-  const label = sessionLabelOf(payload.sessions);
-  const cards = await renderAwardCards(payload.awards, images, label);
+    const label = sessionLabelOf(payload.sessions);
+    const cards = await renderAwardCards(payload.awards, images, label);
 
-  try {
     await postWebhook(
       webhookUrl,
       [buildSummaryHeaderEmbed(campaign.name, campaign.image, payload)],
       cards.map(({ name, data }) => ({ name, data })),
     );
+    return { sent: true };
   } catch (e) {
-    return { sent: false, error: e instanceof Error ? e.message : "Failed to reach Discord" };
+    console.error("sendDiscordSummary failed", e);
+    return { sent: false, error: e instanceof Error ? e.message : "Failed to send the summary" };
   }
-  return { sent: true };
 }
 
 /** Creator-only: mint an additional API key; plaintext returned once. */

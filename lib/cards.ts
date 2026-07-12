@@ -2,7 +2,6 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import satori from "satori";
 import { Resvg } from "@resvg/resvg-js";
-import sharp from "sharp";
 
 // Award "sharable" cards: the character's art as the background with the
 // award text composed over it — rendered server-side (satori → SVG → PNG)
@@ -37,6 +36,10 @@ function loadFonts() {
 async function fetchImageDataUri(url: string | undefined): Promise<string | null> {
   if (!url || !/^https?:\/\//.test(url)) return null;
   try {
+    // Load sharp lazily so a broken native binary (e.g. in a container) makes
+    // portraits fall back to the initial rather than crashing the whole action
+    // at module-load time.
+    const { default: sharp } = await import("sharp");
     const res = await fetch(url, { signal: AbortSignal.timeout(8000) });
     if (!res.ok) return null;
     const buf = Buffer.from(await res.arrayBuffer());
