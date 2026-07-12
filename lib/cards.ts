@@ -23,17 +23,31 @@ function loadFonts() {
   return fontsPromise;
 }
 
+/**
+ * Sniff the real image format from magic bytes. Servers lie about
+ * Content-Type (DDB serves PNG bytes as `image/jpeg`), and resvg decodes by
+ * the data-URI mime, not the bytes — a wrong mime rasterizes to nothing. Only
+ * the formats resvg can actually decode return a mime; webp/avif/unknown
+ * return null so the card falls back to the initial instead of a blank.
+ */
+function sniffImageMime(b: Buffer): string | null {
+  if (b.length >= 8 && b[0] === 0x89 && b[1] === 0x50 && b[2] === 0x4e && b[3] === 0x47) return "image/png";
+  if (b.length >= 3 && b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff) return "image/jpeg";
+  if (b.length >= 4 && b[0] === 0x47 && b[1] === 0x49 && b[2] === 0x46 && b[3] === 0x38) return "image/gif";
+  return null;
+}
+
 /** Fetch a portrait and inline it as a data URI (satori doesn't fetch). */
 async function fetchImageDataUri(url: string | undefined): Promise<string | null> {
   if (!url || !/^https?:\/\//.test(url)) return null;
   try {
     const res = await fetch(url, { signal: AbortSignal.timeout(8000) });
     if (!res.ok) return null;
-    const type = res.headers.get("content-type") ?? "image/png";
-    if (!type.startsWith("image/")) return null;
     const buf = Buffer.from(await res.arrayBuffer());
     if (buf.byteLength > 8_000_000) return null;
-    return `data:${type};base64,${buf.toString("base64")}`;
+    const mime = sniffImageMime(buf);
+    if (!mime) return null;
+    return `data:${mime};base64,${buf.toString("base64")}`;
   } catch {
     return null;
   }
