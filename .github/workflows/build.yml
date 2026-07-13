@@ -8,6 +8,13 @@ on:
     branches: [main]
   workflow_dispatch:
 
+# Serialize builds and cancel superseded ones, so the newest commit always
+# wins the :latest tag. Without this, concurrent builds race and a slower
+# older build can overwrite :latest after a newer one, shipping stale images.
+concurrency:
+  group: build-image
+  cancel-in-progress: true
+
 permissions:
   contents: read
   packages: write
