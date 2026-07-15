@@ -1,6 +1,7 @@
 import { createHash, randomBytes } from "node:crypto";
 import { auth } from "@clerk/nextjs/server";
 import { prisma } from "@/lib/db/prisma";
+import { publishCampaignActivity } from "@/lib/events";
 
 // Credential helpers. An admin API key is 32 random bytes, hex-encoded, shown
 // to the creator exactly once; only its sha256 (plus a display prefix) lands in
@@ -53,4 +54,5 @@ export async function touchCampaign(campaignId: string): Promise<void> {
     where: { id: campaignId },
     data: { activityAt: new Date() },
   });
+  publishCampaignActivity(campaignId);
 }

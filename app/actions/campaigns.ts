@@ -19,6 +19,7 @@ import {
   sessionLabelOf,
 } from "@/lib/discord";
 import { decryptSecret, encryptSecret, encryptionConfigured } from "@/lib/secretbox";
+import { publishCampaignActivity } from "@/lib/events";
 import { renderAwardCards } from "@/lib/cards";
 import { getOrCreateSummary, type SummaryPayload } from "@/lib/summary";
 import { sessions } from "@/lib/stats";
@@ -94,6 +95,7 @@ export async function updateCampaign(campaignId: string, formData: FormData): Pr
       activityAt: new Date(),
     },
   });
+  publishCampaignActivity(campaignId);
   revalidatePath(`/campaigns/${campaignId}`);
 }
 
@@ -285,6 +287,7 @@ export async function setHideDeathSaves(campaignId: string, hide: boolean): Prom
       }),
     ]);
   }
+  publishCampaignActivity(campaignId);
   revalidatePath(`/campaigns/${campaignId}`);
 }
 

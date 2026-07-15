@@ -1,36 +1,48 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 
-const POLL_MS = 4000;
+// Debounce so a burst of rolls (a full initiative round) collapses into one
+// re-render instead of one per roll.
+const COALESCE_MS = 800;
 
-// Polls the campaign's freshness probe and re-fetches the server-rendered
-// page when new rolls have landed. Skips ticks while the tab is hidden.
+// Subscribes to the campaign's live stream (SSE) and re-fetches the
+// server-rendered page when a roll lands or a shared mutation happens. No
+// polling — nothing runs until something actually changes. EventSource
+// reconnects on its own if the connection drops.
 export function LiveRefresh({ campaignId }: { campaignId: string }) {
   const router = useRouter();
-  const last = useRef<string | null>(null);
 
   useEffect(() => {
-    let stopped = false;
-    const tick = async () => {
-      if (stopped || document.hidden) return;
-      try {
-        const res = await fetch(`/api/campaigns/${campaignId}/latest`, { cache: "no-store" });
-        if (!res.ok) return;
-        const { t, n } = (await res.json()) as { t: string | null; n: number };
-        const stamp = `${t}:${n}`;
-        if (last.current !== null && last.current !== stamp) router.refresh();
-        last.current = stamp;
-      } catch {
-        // transient network hiccup — try again next tick
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    let missedWhileHidden = false;
+
+    const refreshSoon = () => {
+      if (timer) return;
+      timer = setTimeout(() => {
+        timer = null;
+        // Don't re-render a hidden tab; catch up when it's focused again.
+        if (document.hidden) missedWhileHidden = true;
+        else router.refresh();
+      }, COALESCE_MS);
+    };
+
+    const onVisible = () => {
+      if (!document.hidden && missedWhileHidden) {
+        missedWhileHidden = false;
+        router.refresh();
       }
     };
-    const timer = setInterval(tick, POLL_MS);
-    void tick();
+    document.addEventListener("visibilitychange", onVisible);
+
+    const source = new EventSource(`/api/campaigns/${campaignId}/stream`);
+    source.addEventListener("activity", refreshSoon);
+
     return () => {
-      stopped = true;
-      clearInterval(timer);
+      document.removeEventListener("visibilitychange", onVisible);
+      if (timer) clearTimeout(timer);
+      source.close();
     };
   }, [campaignId, router]);
 

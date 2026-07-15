@@ -3,6 +3,7 @@ import type { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/db/prisma";
 import { hashIngestKey } from "@/lib/campaigns";
 import { deriveRawEvent } from "@/lib/derive";
+import { publishCampaignActivity } from "@/lib/events";
 
 // The Foundry module POSTs cross-origin with Authorization + X-Campaign-Id
 // headers, so the browser preflights every request — answer OPTIONS and echo
@@ -80,8 +81,11 @@ export async function POST(request: Request) {
   });
 
   // Incremental derive — same code path reprocess uses, so live ingest and
-  // rebuilds can't drift apart. Dashboards notice via the /latest poll.
+  // rebuilds can't drift apart.
   await deriveRawEvent(row);
+
+  // Persisted, so it's safe to nudge every open dashboard to re-render.
+  publishCampaignActivity(campaign.id);
 
   return Response.json({ ok: true }, { headers: CORS_HEADERS });
 }
