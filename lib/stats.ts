@@ -588,6 +588,23 @@ export async function rollLog(
 }
 
 /**
+ * Monotonic-ish version stamp for a campaign: the newest of any roll write
+ * (raw_events.updated_at — ingest and deletions bump it) and the campaign's
+ * activity stamp (shared mutations). Any change advances it, so it's the cache
+ * key that invalidates the aggregate bundle. One cheap indexed query.
+ */
+export async function campaignVersion(campaignId: string): Promise<number> {
+  const [latest, campaign] = await Promise.all([
+    prisma.rawEvent.aggregate({ where: { campaignId }, _max: { updatedAt: true } }),
+    prisma.campaign.findUnique({ where: { id: campaignId }, select: { activityAt: true } }),
+  ]);
+  return Math.max(
+    latest._max.updatedAt?.getTime() ?? 0,
+    campaign?.activityAt.getTime() ?? 0,
+  );
+}
+
+/**
  * Group rolls — bursts of the same check by ≥2 subjects within the window.
  * Callers pass PC actor fids via `f.actorFids` to limit to party rolls; other
  * filters (session/day/recency) narrow the pool as usual.

@@ -15,7 +15,14 @@ import {
   skillAbilityBuckets,
   type StatFilters,
 } from "@/lib/stats";
-import { actorFidsForKind, groupRollsFor, rollLog, sessions } from "@/lib/stats";
+import {
+  actorFidsForKind,
+  campaignVersion,
+  groupRollsFor,
+  rollLog,
+  sessions,
+} from "@/lib/stats";
+import { getOrCompute } from "@/lib/cache";
 import { BubblePackCard } from "./bubble-card";
 import { RollLog } from "./roll-log";
 import { ViewToggle } from "./view-toggle";
@@ -33,6 +40,7 @@ import {
 } from "@/lib/dnd5e-meta";
 import { Badge } from "@/components/ui/badge";
 import { CampaignSettings } from "./settings";
+import { CacheViewer } from "./cache-viewer";
 import { ClearRolls } from "./clear-rolls";
 import { SendSummary } from "./send-summary";
 import { ShowInactiveToggle } from "./show-inactive-toggle";
@@ -103,17 +111,98 @@ export default async function CampaignPage({
     includeHidden: isCreator,
   };
 
-  // Group rolls are inherently party-wide, so they ignore the actor/kind
-  // slicer and always run over PCs — but still honour session/recency.
-  const pcFids = await actorFidsForKind(id, "pc");
-  const groupFilter: StatFilters = {
-    session: filters.session,
-    days: filters.days,
-    includeHidden: filters.includeHidden,
-    actorFids: pcFids,
+  // The whole aggregate bundle is cached in memory, keyed by campaign + this
+  // filter set + a version stamp that any write advances — so a re-render with
+  // unchanged data skips all ~14 scans. The version query is the only DB hit on
+  // a cache hit.
+  const version = await campaignVersion(id);
+  const cacheParts = {
+    by,
+    actor: filters.actor ?? null,
+    type: filters.type ?? null,
+    days: filters.days ?? null,
+    session: filters.session ?? null,
+    kind: kind ?? null,
+    gm: filters.includeHidden,
   };
+  const cacheLabel =
+    [
+      `by ${by === "author" ? "player" : "character"}`,
+      filters.session ? `session ${filters.session}` : null,
+      kind ? `kind ${kind}` : null,
+      filters.actor ? `actor ${filters.actor}` : null,
+      filters.type ? `type ${filters.type}` : null,
+      filters.days ? `${filters.days}d` : null,
+      filters.includeHidden ? "GM" : null,
+    ]
+      .filter(Boolean)
+      .join(" · ") || "default";
 
-  const [
+  const bundle = await getOrCompute(id, version, cacheParts, cacheLabel, async () => {
+    // Group rolls are inherently party-wide, so they ignore the actor/kind
+    // slicer and always run over PCs — but still honour session/recency.
+    const pcFids = await actorFidsForKind(id, "pc");
+    const groupFilter: StatFilters = {
+      session: filters.session,
+      days: filters.days,
+      includeHidden: filters.includeHidden,
+      actorFids: pcFids,
+    };
+    const [
+      stats,
+      histogram,
+      types,
+      deathSaves,
+      totals,
+      skillBuckets,
+      skillMatrix,
+      checkMatrix,
+      saveMatrix,
+      options,
+      items,
+      tops,
+      actors,
+      members,
+      groupReport,
+      sessionList,
+    ] = await Promise.all([
+      actorStats(id, filters, by),
+      d20Histogram(id, filters, by),
+      rollTypeCounts(id, filters),
+      recentDeathSaves(id, filters),
+      campaignTotals(id, filters),
+      skillAbilityBuckets(id, filters),
+      actorSkillMatrix(id, filters, by),
+      actorAbilityMatrix(id, filters, by, ["ability"]),
+      actorAbilityMatrix(id, filters, by, ["save", "concentration"]),
+      filterOptions(id),
+      itemUsage(id, filters),
+      actorTops(id, filters, by),
+      prisma.actor.findMany({ where: { campaignId: id } }),
+      campaignMembers(id),
+      groupRollsFor(id, groupFilter),
+      sessions(id),
+    ]);
+    return {
+      stats,
+      histogram,
+      types,
+      deathSaves,
+      totals,
+      skillBuckets,
+      skillMatrix,
+      checkMatrix,
+      saveMatrix,
+      options,
+      items,
+      tops,
+      actors,
+      members,
+      groupReport,
+      sessionList,
+    };
+  });
+  const {
     stats,
     histogram,
     types,
@@ -129,24 +218,8 @@ export default async function CampaignPage({
     actors,
     members,
     groupReport,
-  ] = await Promise.all([
-    actorStats(id, filters, by),
-    d20Histogram(id, filters, by),
-    rollTypeCounts(id, filters),
-    recentDeathSaves(id, filters),
-    campaignTotals(id, filters),
-    skillAbilityBuckets(id, filters),
-    actorSkillMatrix(id, filters, by),
-    actorAbilityMatrix(id, filters, by, ["ability"]),
-    actorAbilityMatrix(id, filters, by, ["save", "concentration"]),
-    filterOptions(id),
-    itemUsage(id, filters),
-    actorTops(id, filters, by),
-    prisma.actor.findMany({ where: { campaignId: id } }),
-    campaignMembers(id),
-    groupRollsFor(id, groupFilter),
-  ]);
-  const sessionList = await sessions(id);
+    sessionList,
+  } = bundle;
   const logRows = view === "log" ? await rollLog(id, filters) : [];
   const summaryKeys = isCreator
     ? (
@@ -477,6 +550,8 @@ export default async function CampaignPage({
           }))}
         />
       )}
+
+      {isCreator && <CacheViewer campaignId={campaign.id} />}
     </main>
   );
 }

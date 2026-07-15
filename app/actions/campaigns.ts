@@ -20,9 +20,15 @@ import {
 } from "@/lib/discord";
 import { decryptSecret, encryptSecret, encryptionConfigured } from "@/lib/secretbox";
 import { publishCampaignActivity } from "@/lib/events";
+import {
+  cacheStats,
+  clearCampaign,
+  inspectCampaign,
+  type CacheEntryView,
+} from "@/lib/cache";
 import { renderAwardCards } from "@/lib/cards";
 import { getOrCreateSummary, type SummaryPayload } from "@/lib/summary";
-import { sessions } from "@/lib/stats";
+import { campaignVersion, sessions } from "@/lib/stats";
 import { sessionDayFrom } from "@/lib/session-day";
 
 // Server actions are untrusted entry points (reachable as POSTs without the
@@ -483,4 +489,25 @@ export async function deleteApiKey(keyId: string): Promise<void> {
   await requireCreator(apiKey.campaignId, userId);
   await prisma.apiKey.delete({ where: { id: keyId } });
   revalidatePath(`/campaigns/${apiKey.campaignId}`);
+}
+
+export type CacheReport = {
+  entries: CacheEntryView[];
+  stats: { entries: number; hits: number; misses: number };
+  version: number;
+};
+
+/** Creator-only: inspect the in-memory aggregate cache for this campaign. */
+export async function getCacheReport(campaignId: string): Promise<CacheReport> {
+  const userId = await requireUserId();
+  await requireCreator(campaignId, userId);
+  const version = await campaignVersion(campaignId);
+  return { entries: inspectCampaign(campaignId, version), stats: cacheStats(), version };
+}
+
+/** Creator-only: drop this campaign's cached aggregate bundles. */
+export async function clearCampaignCache(campaignId: string): Promise<{ cleared: number }> {
+  const userId = await requireUserId();
+  await requireCreator(campaignId, userId);
+  return { cleared: clearCampaign(campaignId) };
 }
