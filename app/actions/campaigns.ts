@@ -23,6 +23,7 @@ import { publishCampaignActivity } from "@/lib/events";
 import {
   cacheStats,
   clearCampaign,
+  getEntryValue,
   inspectCampaign,
   type CacheEntryView,
 } from "@/lib/cache";
@@ -510,4 +511,20 @@ export async function clearCampaignCache(campaignId: string): Promise<{ cleared:
   const userId = await requireUserId();
   await requireCreator(campaignId, userId);
   return { cleared: clearCampaign(campaignId) };
+}
+
+/** Creator-only: the cached payload for one entry, as pretty JSON (null if gone). */
+export async function getCacheEntryValue(
+  campaignId: string,
+  key: string,
+): Promise<string | null> {
+  const userId = await requireUserId();
+  await requireCreator(campaignId, userId);
+  const value = getEntryValue(campaignId, key);
+  if (value === undefined) return null;
+  try {
+    return JSON.stringify(value, null, 2);
+  } catch {
+    return "// value could not be serialized";
+  }
 }

@@ -1,7 +1,12 @@
 "use client";
 
-import { useEffect, useMemo, useState, useTransition } from "react";
-import { clearCampaignCache, getCacheReport, type CacheReport } from "@/app/actions/campaigns";
+import { Fragment, useEffect, useMemo, useState, useTransition } from "react";
+import {
+  clearCampaignCache,
+  getCacheEntryValue,
+  getCacheReport,
+  type CacheReport,
+} from "@/app/actions/campaigns";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 
@@ -27,13 +32,32 @@ export function CacheViewer({ campaignId }: { campaignId: string }) {
   const [report, setReport] = useState<CacheReport | null>(null);
   const [query, setQuery] = useState("");
   const [pending, startTransition] = useTransition();
+  // key -> fetched JSON payload (or a loading/gone marker), for expanded rows.
+  const [values, setValues] = useState<Record<string, string>>({});
+  const [openKey, setOpenKey] = useState<string | null>(null);
 
-  const refresh = () =>
+  const refresh = () => {
+    setValues({});
     startTransition(async () => setReport(await getCacheReport(campaignId)));
+  };
 
   useEffect(() => {
     startTransition(async () => setReport(await getCacheReport(campaignId)));
   }, [campaignId]);
+
+  const toggle = (key: string) => {
+    if (openKey === key) {
+      setOpenKey(null);
+      return;
+    }
+    setOpenKey(key);
+    if (values[key] === undefined) {
+      startTransition(async () => {
+        const json = await getCacheEntryValue(campaignId, key);
+        setValues((v) => ({ ...v, [key]: json ?? "// entry was evicted" }));
+      });
+    }
+  };
 
   const entries = useMemo(() => {
     const list = report?.entries ?? [];
@@ -109,20 +133,39 @@ export function CacheViewer({ campaignId }: { campaignId: string }) {
                 </tr>
               </thead>
               <tbody>
-                {entries.map((e, i) => (
-                  <tr key={i} className="border-t border-border">
-                    <td className="py-1.5 pr-3 font-mono text-xs">{e.label}</td>
-                    <td className="py-1.5 pr-3 tabular-nums">{humanBytes(e.sizeBytes)}</td>
-                    <td className="py-1.5 pr-3 tabular-nums">{humanAge(e.ageMs)}</td>
-                    <td className="py-1.5 pr-3 tabular-nums">{e.hits}</td>
-                    <td className="py-1.5">
-                      {e.current ? (
-                        <span className="text-green-600 dark:text-green-500">live</span>
-                      ) : (
-                        <span className="text-muted-foreground">stale</span>
-                      )}
-                    </td>
-                  </tr>
+                {entries.map((e) => (
+                  <Fragment key={e.key}>
+                    <tr
+                      onClick={() => toggle(e.key)}
+                      className="cursor-pointer border-t border-border hover:bg-muted/50"
+                    >
+                      <td className="py-1.5 pr-3 font-mono text-xs">
+                        <span className="mr-1 inline-block text-muted-foreground">
+                          {openKey === e.key ? "▾" : "▸"}
+                        </span>
+                        {e.label}
+                      </td>
+                      <td className="py-1.5 pr-3 tabular-nums">{humanBytes(e.sizeBytes)}</td>
+                      <td className="py-1.5 pr-3 tabular-nums">{humanAge(e.ageMs)}</td>
+                      <td className="py-1.5 pr-3 tabular-nums">{e.hits}</td>
+                      <td className="py-1.5">
+                        {e.current ? (
+                          <span className="text-green-600 dark:text-green-500">live</span>
+                        ) : (
+                          <span className="text-muted-foreground">stale</span>
+                        )}
+                      </td>
+                    </tr>
+                    {openKey === e.key && (
+                      <tr className="border-t border-border">
+                        <td colSpan={5} className="py-2">
+                          <pre className="max-h-96 overflow-auto rounded-md border border-border bg-muted/40 p-3 font-mono text-[11px] leading-relaxed">
+                            {values[e.key] ?? "Loading…"}
+                          </pre>
+                        </td>
+                      </tr>
+                    )}
+                  </Fragment>
                 ))}
               </tbody>
             </table>

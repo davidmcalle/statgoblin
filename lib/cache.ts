@@ -83,6 +83,8 @@ export async function getOrCompute<T>(
 }
 
 export type CacheEntryView = {
+  /** Internal cache key — opaque handle for fetching this entry's value. */
+  key: string;
   label: string;
   version: number;
   sizeBytes: number;
@@ -96,9 +98,10 @@ export type CacheEntryView = {
 export function inspectCampaign(campaignId: string, currentVersion: number): CacheEntryView[] {
   const now = Date.now();
   const rows: CacheEntryView[] = [];
-  for (const e of cache.values()) {
+  for (const [key, e] of cache) {
     if (e.campaignId !== campaignId) continue;
     rows.push({
+      key,
       label: e.label,
       version: e.version,
       sizeBytes: e.sizeBytes,
@@ -108,6 +111,13 @@ export function inspectCampaign(campaignId: string, currentVersion: number): Cac
     });
   }
   return rows.sort((a, b) => b.version - a.version || b.hits - a.hits);
+}
+
+/** The stored value for one entry, guarded to the owning campaign. */
+export function getEntryValue(campaignId: string, key: string): unknown | undefined {
+  const e = cache.get(key);
+  if (!e || e.campaignId !== campaignId) return undefined;
+  return e.value;
 }
 
 /** Drop every entry for a campaign; returns how many were removed. */
